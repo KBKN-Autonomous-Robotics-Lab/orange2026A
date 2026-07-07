@@ -30,3 +30,7 @@
     local-name: navigation_control
     uri: https://github.com/KBKN-Autonomous-Robotics-Lab/navigation_control.git
     version: main
+- git:
+    local-name: intensity_matching
+    uri: https://github.com/kugurofu/intensity_matching.git
+    version: main
