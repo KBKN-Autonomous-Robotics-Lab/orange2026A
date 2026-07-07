@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="use_sim_time" default="false"/>
+  <arg name="nav_topic" default="/nav_state"/>
+  <arg name="estop_topic" default="/estop"/>
+
+  <!-- led_node -->
+  <node pkg="orange_sensor_tools" exec="led_node">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="serial_port" value="/dev/sensors/LED"/>
+    <param name="baud_rate" value="115200"/>
+    <param name="nav_topic" value="$(var nav_topic)"/>
+    <param name="estop_topic" value="$(var estop_topic)"/>
+  </node>
+</launch>

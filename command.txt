@@ -1,0 +1,12 @@
+# sensor
+$ ros2 launch orange_bringup orange_robot.launch.xml
+
+# navigation
+$ ros2 launch try_navigation try_navigation.launch.py
+$ ros2 run navigation_control gps_waypoint
+$ ros2 run try_navigation path_follower
+
+# make waypoint
+file:gps_waypoint
+hensuu:self.ref_points(ido,keido)
+
