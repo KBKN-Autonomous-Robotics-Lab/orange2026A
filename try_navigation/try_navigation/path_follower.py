@@ -172,6 +172,8 @@ class PathFollower(Node):
         self.roadside_detected = False
         self.boundary_distance = 0.0
         self.boundary_angle = 0.0
+        self.safe_dist = 0.20
+        self.recover_dist = 0.55
     
     def roadside_callback(self, msg):
         self.roadside_detected = msg.detected
@@ -283,8 +285,8 @@ class PathFollower(Node):
         #############################################################
         # Roadside Tracking
         #############################################################
-        safe_dist = 0.20      # この距離より近付いたら回避開始
-        recover_dist = 0.55   # この距離まで戻したい
+        safe_dist = self.safe_dist       # この距離より近付いたら回避開始
+        recover_dist = self.recover_dist # この距離まで戻したい
         approaching = self.boundary_angle < -10*np.pi/180
         if self.roadside_detected:
             if self.boundary_distance < safe_dist or approaching:
