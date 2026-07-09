@@ -80,6 +80,7 @@ class PathFollower(Node):
         self.human_sub = self.create_subscription(String, '/human_status', self.human_callback, 10)
         self.waypoint_number_sub = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.roadside_sub = self.create_subscription(RoadsideInfo, "/roadside_info", self.roadside_callback, 10)
+        self.stop_line_sub = self.create_subscription(std_msgs.Bool, "/stop_line", self.stopline_callback, 10)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -129,25 +130,26 @@ class PathFollower(Node):
         self.stop_xy_test = [8, 10, -10, 10]
         self.stop_xy_test_flag = 1
         
-        self.stop_xy = np.array([ #xmin,xmax,ymin,ymax, flag
-            [ 64.2,  65.2,  19.0,  39.0, 1.0], #shiyakusyo
-            [100.0, 101.0,  25.0,  45.0, 1.0], #dourotan1
-            [177.7, 178.7,  25.0,  45.0, 1.0], #dourotan2
-            [257.5, 277.5, -60.0, -59.0, 1.0], #singoumaeteisisen1
-            [257.5, 277.5, -66.5, -65.5, 1.0], #singoumae1
-            [256.5, 276.5, -86.2, -85.2, 1.0], #singoumaeteisisen2
-            [270.3, 271.3, -99.0, -79.5, 1.0], #singoumae2
-            [405.0, 425.0, -80.2, -79.2, 1.0], #ekimae oudanhodou1 y-1
-            [545.0, 568.0, -85.0, -60.0, 0.0], #ekimae not stop
-            [410.0, 417.0, -71.5, -70.5, 1.0], #ekimae oudanhodou2 y-2
-            [290.6, 291.6, -98.0, -78.0, 1.0], #singoumaeteisisen3
-            [284.3, 285.3, -98.0, -78.0, 1.0], #singoumae3
-            [259.5, 279.5, -83.7, -82.7, 1.0], #singoumaeteisisen4 12
-            [259.5, 279.5, -80.3, -79.3, 1.0], #singoumae4 13
-            [185.0, 186.0,  25.0,  45.0, 1.0], #dourotan3
-            [107.5, 108.5,  25.0,  45.0, 1.0], #dourotan4
-            [ 64.0, 104.0, -30.0, -25.0, 1.0], #GOAL!!!!
-            [  999,   999,   999,   999, 0.0] ]) #
+        self.stop_xy = np.array([ 
+            #xmin,   xmax,  ymin,  ymax,flag, line
+            [ 64.2,  65.2,  19.0,  39.0, 1.0, 1.0], #shiyakusyo
+            [100.0, 101.0,  25.0,  45.0, 1.0, 0.0], #dourotan1
+            [177.7, 178.7,  25.0,  45.0, 1.0, 0.0], #dourotan2
+            [257.5, 277.5, -60.0, -59.0, 1.0, 1.0], #singoumaeteisisen1
+            [257.5, 277.5, -66.5, -65.5, 1.0, 0.0], #singoumae1
+            [256.5, 276.5, -86.2, -85.2, 1.0, 1.0], #singoumaeteisisen2
+            [270.3, 271.3, -99.0, -79.5, 1.0, 0.0], #singoumae2
+            [405.0, 425.0, -80.2, -79.2, 1.0, 0.0], #ekimae oudanhodou1 y-1
+            [545.0, 568.0, -85.0, -60.0, 0.0, 0.0], #ekimae not stop
+            [410.0, 417.0, -71.5, -70.5, 1.0, 0.0], #ekimae oudanhodou2 y-2
+            [290.6, 291.6, -98.0, -78.0, 1.0, 1.0], #singoumaeteisisen3
+            [284.3, 285.3, -98.0, -78.0, 1.0, 0.0], #singoumae3
+            [259.5, 279.5, -83.7, -82.7, 1.0, 1.0], #singoumaeteisisen4 12
+            [259.5, 279.5, -80.3, -79.3, 1.0, 0.0], #singoumae4 13
+            [185.0, 186.0,  25.0,  45.0, 1.0, 0.0], #dourotan3
+            [107.5, 108.5,  25.0,  45.0, 1.0, 0.0], #dourotan4
+            [ 64.0, 104.0, -30.0, -25.0, 1.0, 0.0], #GOAL!!!!
+            [  999,   999,   999,   999, 0.0, 0.0] ]) #
         self.stop_num = 0;
         
         #obs
@@ -169,16 +171,15 @@ class PathFollower(Node):
         self.c_jam_obs = 0
         self.waypoint_number = 0
 
+        # roadside
         self.roadside_detected = False
         self.boundary_distance = 0.0
         self.boundary_angle = 0.0
         self.safe_dist = 0.20
         self.recover_dist = 0.55
-    
-    def roadside_callback(self, msg):
-        self.roadside_detected = msg.detected
-        self.boundary_distance = msg.boundary_distance
-        self.boundary_angle = msg.boundary_angle
+
+        # stop line
+        self.stop_line = None
 
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
@@ -240,6 +241,14 @@ class PathFollower(Node):
     def get_waypoint_number(self, msg):
         #get waypoint number
         self.waypoint_number = msg.data
+
+    def roadside_callback(self, msg):
+        self.roadside_detected = msg.detected
+        self.boundary_distance = msg.boundary_distance
+        self.boundary_angle = msg.boundary_angle
+    
+    def stopline_callback(self, msg):
+        self.stop_line = msg.data
         
     def robot_ctrl(self):
         #self.get_logger().info('0.05秒ごとに車両制御を実行')
@@ -600,16 +609,23 @@ class PathFollower(Node):
             if self.stop_num <= 2:
                 self.stop_num = 3
         
+        # odometry stop point set
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
-            if self.stop_xy[self.stop_num,4] > 0:
-                self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
-                self.stop_flag = 1;
-                navigation_status = "STOP"
-                #print(self.stop_num)
+            if self.stop_xy[self.stop_num,5] == 0:
+                if self.stop_xy[self.stop_num,4] > 0:
+                    self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
+                    self.stop_flag = 1;
+                    navigation_status = "STOP"
+                    #print(self.stop_num)
+                else:
+                    self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
+                self.stop_num = self.stop_num + 1;     
             else:
-                self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
-            self.stop_num = self.stop_num + 1;
-        
+                if self.stopline:
+                    self.stop_flag = 1;
+                    navigation_status = "STOP"
+                    self.stop_num = self.stop_num + 1;     
+
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
         points = np.frombuffer(cloud_msg.data, dtype=np.uint8).reshape(-1, cloud_msg.point_step)
