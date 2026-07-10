@@ -19,7 +19,7 @@ class GPSData(Node):
     def __init__(self):
         super().__init__('gps_data_acquisition')
 
-        self.declare_parameter('port', '/dev/sensors/gps')
+        self.declare_parameter('port', '/dev/sensors/GNSS_UM982')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('country_id', 0)
         self.declare_parameter('heading', 0.0)
@@ -152,7 +152,7 @@ class GPSData(Node):
     def get_gps_quat(self, dev_name, country_id):
         # interface with sensor device(as a serial port)
         try:
-            serial_port = serial.Serial(dev_name, self.serial_baud)
+            serial_port = serial.Serial(dev_name, self.serial_baud, timeout=0.5)
         except serial.SerialException as serialerror:
             self.get_logger().error(f"Serial error: {serialerror}")
             return None
@@ -210,8 +210,22 @@ class GPSData(Node):
 #                "", 
 #                "checksum"]
     
-        line_latlon = serial_port.readline()
-        talker_ID = line_latlon.find(initial_letters)
+#        line_latlon = serial_port.readline()
+#        talker_ID = line_latlon.find(initial_letters)
+#        if talker_ID != -1:
+        Fixtype_data = 0
+        latitude_data = 0
+        longitude_data = 0
+        altitude_data = 0
+        satelitecount_data = 0
+
+        gga_deadline = time.time() + 2
+        talker_ID = -1
+        while time.time() < gga_deadline:
+            line_latlon = serial_port.readline()
+            talker_ID = line_latlon.find(initial_letters)
+            if talker_ID != -1:
+                break
         if talker_ID != -1:
             line_latlon = line_latlon[(talker_ID-1):]
             gps_data = line_latlon.split(b",")
@@ -241,7 +255,9 @@ class GPSData(Node):
                 longitude_data = 0
                 altitude_data = 0
                 satelitecount_data = 0
-                self.get_logger().error("!--not GPS data--!")          
+                self.get_logger().error("!--not GPS data--!")  
+        else:
+            self.get_logger().error("!--GGA not found within timeout--!")        
         
         serial_port.close()
         
