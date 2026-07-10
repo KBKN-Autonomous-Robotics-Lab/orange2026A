@@ -133,7 +133,9 @@ class PathFollower(Node):
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag, line
             [ -30.0, -3.0, -20.0,  20.0, 1.0, 1.0], #nakaniwa test
-            [ 64.2,  65.2,  19.0,  39.0, 1.0, 1.0], #shiyakusyo
+            [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0], #shiyakusyo 1 tsukuba2026
+            [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0], #shiyakusyo 2 tsukuba2026
+            [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0], #shiyakusyo
             [100.0, 101.0,  25.0,  45.0, 1.0, 0.0], #dourotan1
             [177.7, 178.7,  25.0,  45.0, 1.0, 0.0], #dourotan2
             [257.5, 277.5, -60.0, -59.0, 1.0, 1.0], #singoumaeteisisen1
