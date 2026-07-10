@@ -132,6 +132,7 @@ class PathFollower(Node):
         
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag, line
+            [ -30.0, -3.0, -20.0,  20.0, 1.0, 1.0], #nakaniwa test
             [ 64.2,  65.2,  19.0,  39.0, 1.0, 1.0], #shiyakusyo
             [100.0, 101.0,  25.0,  45.0, 1.0, 0.0], #dourotan1
             [177.7, 178.7,  25.0,  45.0, 1.0, 0.0], #dourotan2
@@ -621,7 +622,7 @@ class PathFollower(Node):
                     self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
                 self.stop_num = self.stop_num + 1;     
             else:
-                if self.stopline:
+                if self.stop_line:
                     self.stop_flag = 1;
                     navigation_status = "STOP"
                     self.stop_num = self.stop_num + 1;     
