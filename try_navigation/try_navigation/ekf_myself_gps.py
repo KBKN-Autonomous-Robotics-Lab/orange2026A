@@ -176,7 +176,7 @@ class ExtendedKalmanFilter(Node):
     def determination_of_R(self):
         if self.GpsXY is not None:
             #カルマンフィルタのデッドレコニングよりになる範囲を指定
-            if ((-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (35 < self.GpsXY[1]) and (self.GpsXY[1]<110)) or ((539<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)) or ((260<self.GpsXY[0]) and (self.GpsXY[0]<275) and (-66 < self.GpsXY[1]) and (self.GpsXY[1]<-40)): # last is for nakaniwa test or ((-41<self.GpsXY[0]) and (self.GpsXY[0]<-7) and (-52 < self.GpsXY[1]) and (self.GpsXY[1]<71)) eki x 476<self.GpsXY[0]) and (self.GpsXY[0]<600
+            if ((-60<self.GpsXY[0]) and (self.GpsXY[0]<60) and (35 < self.GpsXY[1]) and (self.GpsXY[1]<110)) or ((539<self.GpsXY[0]) and (self.GpsXY[0]<600) and (-84 < self.GpsXY[1]) and (self.GpsXY[1]<-25)) or ((260<self.GpsXY[0]) and (self.GpsXY[0]<275) and (-66 < self.GpsXY[1]) and (self.GpsXY[1]<-40)): # last is for nakaniwa test or ((-41<self.GpsXY[0]) and (self.GpsXY[0]<-7) and (-52 < self.GpsXY[1]) and (self.GpsXY[1]<71)) eki x 476<self.GpsXY[0]) and (self.GpsXY[0]<600 # tsukuba2026 ((40<self.GpsXY[0]) and (self.GpsXY[0]<118) and (-29 < self.GpsXY[1]) and (self.GpsXY[1]<88))
                 #self.gps_rr_flag = 1
                 self.gps_rr_flag = 0 #self.gps_rr_flag =1はGPS受信精度よく、0でGPS受信精度低い範囲に入ったフラグ
                 #self.offsetyaw_bad_gps = -10/180*math.pi
