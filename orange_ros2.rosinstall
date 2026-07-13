@@ -27,6 +27,10 @@
     uri: https://github.com/KBKN-Autonomous-Robotics-Lab/linefit_ground_segmentation_ros2.git
     version: main
 - git:
+    local-name: cxd5602pwbimu
+    uri: https://github.com/KBKN-Autonomous-Robotics-Lab/cxd5602pwbimu.git
+    version: main
+- git:
     local-name: navigation_control
     uri: https://github.com/KBKN-Autonomous-Robotics-Lab/navigation_control.git
     version: main
