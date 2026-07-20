@@ -16,6 +16,9 @@ class PointCloudMerger(Node):
             durability=QoSDurabilityPolicy.VOLATILE,
             depth = 1
         )
+
+        # set parameter (launch can change this parameter)
+        self.use_sim_time = self.get_parameter('use_sim_time').get_parameter_value().bool_value
         
         # subscriber
         self.pcd_upper_sub = message_filters.Subscriber(self, sensor_msgs.PointCloud2, '/pcd_rotation')
@@ -44,7 +47,12 @@ class PointCloudMerger(Node):
             return
 
         merged = sensor_msgs.PointCloud2()
-        merged.header = self.point_cloud_1.header
+        merged.header.frame_id = self.point_cloud_1.header.frame_id
+        if self.use_sim_time:
+            merged.header.stamp = self.get_clock().now().to_msg()
+            self.get_logger().info(f"header stamp = {merged.header.stamp}")
+        else:
+            merged.header.stamp = self.point_cloud_1.header.stamp
         merged.height = 1
         merged.width = self.point_cloud_1.width + self.point_cloud_2.width
         merged.fields = self.point_cloud_1.fields
