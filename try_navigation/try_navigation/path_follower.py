@@ -178,8 +178,7 @@ class PathFollower(Node):
         self.roadside_detected = False
         self.boundary_distance = 0.0
         self.boundary_angle = 0.0
-        self.safe_dist = 0.20
-        self.recover_dist = 1.05
+        self.safe_dist = -0.80
 
         # stop line
         self.stop_line = None
@@ -298,14 +297,13 @@ class PathFollower(Node):
         # Roadside Tracking
         #############################################################
         safe_dist = self.safe_dist       # この距離より近付いたら回避開始
-        recover_dist = self.recover_dist # この距離まで戻したい
         approaching = self.boundary_angle < -10*np.pi/180
         if self.roadside_detected:
-            if self.boundary_distance < safe_dist or approaching:
+            if self.boundary_distance > safe_dist or approaching:
                 # 境界まで近すぎる
-                error = recover_dist + self.boundary_distance
+                error = safe_dist + self.boundary_distance
                 print("--- Roadside --- Befor target_theta[deg]:",target_theta)
-                target_rad = 1.0 * error
+                target_rad = 1.0 * -error
                 target_theta = (target_rad) * (180 / math.pi)
                 print("--- Roadside --- After target_theta[deg]:",target_theta)
         
