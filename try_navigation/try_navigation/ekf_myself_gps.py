@@ -75,7 +75,7 @@ class ExtendedKalmanFilter(Node):
         #self.sub_b = self.create_subscription(
         #    Odometry, '/odom_ref_slam', self.sensor_b_callback, 10)
 
-        self.declare_parameter("ekf_publish_TF", False)
+        self.declare_parameter("ekf_publish_TF", True)
         self.ekf_publish_TF = self.get_parameter(
             "ekf_publish_TF").get_parameter_value().bool_value
 
