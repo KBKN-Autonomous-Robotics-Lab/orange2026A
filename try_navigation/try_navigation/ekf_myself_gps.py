@@ -55,6 +55,7 @@ class ExtendedKalmanFilter(Node):
         self.kalf_speed_param_noGPS = 1.00
         self.gps_rr_flag = 1
         self.offsetyaw_bad_gps = 0
+        self.angular_z = 0
 
         #pd init
         self.e_n = 0.1;
@@ -134,6 +135,8 @@ class ExtendedKalmanFilter(Node):
 
         self.GTheta = self.orientation_to_yaw(
             data.pose.pose.orientation.z, data.pose.pose.orientation.w)
+        
+        self.angular_z = data.twist.twist.angular.z
         
         # initialize odom
         if not self.is_initialized and self.SmpTime is not None and self.SmpTime > 0: 
@@ -452,12 +455,19 @@ class ExtendedKalmanFilter(Node):
             self.R4 = R[3]
             self.get_logger().info(f"++ RR_count_bad: {self.RR_count_bad}++")
             
+            # 角速度情報から直進を判定
+            if abs(self.angular_z) < 0.10: # rad/s
+                straight = True
+            else:
+                straight = False
+
             #if self.Number_of_satellites >= 28: 
             #GPSの受信衛星整数が多い（≒精度が良い？としている）場合に角度補正を行う
+            #直進時のみ角度補正を行う
             #現状はカルマンフィルタとは別に、受信精度がいい時のGPS方位とオドメトリの角度の値をストックし、
             #そのストックした値の差分の中央値（GPS方位-オドメトリ方位　の10秒分（100回/10Hz））のデータの中央値）を
             #オフセット角度として保存・更新し、足して補正してる状態。
-            if self.Number_of_satellites >= self.set_yaw_satellites_no and self.gps_rr_flag == 1:
+            if self.Number_of_satellites >= self.set_yaw_satellites_no and self.gps_rr_flag == 1 and straight:
                 self.GPS_angle_conut += 1
                 self.GPS_angle_reset_count = 0
                 yaw_offset1 = self.GPSYaw % (360/180*math.pi)
@@ -504,7 +514,10 @@ class ExtendedKalmanFilter(Node):
                 #self.robot_yaw = self.GTheta + self.offsetyaw
                 yaw1 = self.GTheta % (360/180*math.pi)
                 yaw2 = self.offsetyaw % (360/180*math.pi)
-                self.robot_yaw = yaw1 + yaw2 + self.offsetyaw_bad_gps
+                if straight: # 直進時のみ補正
+                    self.robot_yaw = yaw1 + yaw2 + self.offsetyaw_bad_gps
+                else:
+                    self.robot_yaw = yaw1 + self.offsetyaw_bad_gps
                 ##########################
                 
                 if self.robot_yaw < -np.pi:
