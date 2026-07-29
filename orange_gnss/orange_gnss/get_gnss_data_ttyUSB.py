@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from orange_msgs.msg import PppNav
 import math
 import rclpy
 import serial
@@ -49,6 +50,8 @@ class GPSData(Node):
         self.raw_heading_msg = String()
         self.raw_gps_pub = self.create_publisher(String, '/gps_raw', 1)
         self.raw_gps_msg = String()
+        self.ppp_pub = self.create_publisher(PppNav, '/gnss/ppp_status', 10)
+        self.ppp_cache = None
         
         # service client
         self.client = self.create_client(Avglatlon, 'send_avg_gps')
@@ -149,8 +152,51 @@ class GPSData(Node):
             self.send_request()
         self.is_acquiring = False
 
+    def parse_pppnava(self, line):
+        """bytes 1行を受け取り、#PPPNAVA ならdictを返す。非該当は None。"""
+        idx = line.find(b'#PPPNAVA')
+        if idx == -1:
+            return None
+        parts = line[idx:].split(b';', 1)
+        if len(parts) < 2:
+            return None
+        f = parts[1].split(b',')
+        if len(f) < 15:
+            return None
+        try:
+            pos_type = f[1].decode('ascii', errors='ignore')
+            return {
+                'pos_type':    pos_type,
+                'lat_sd':      float(f[7]),
+                'lon_sd':      float(f[8]),
+                'alt_sd':      float(f[9]),
+                'sol_age':     float(f[12]),
+                'num_tracked': int(f[13]),
+                'num_used':    int(f[14]),
+                'valid':       (pos_type != 'NONE'),
+            }
+        except (ValueError, IndexError):
+            return None
+
+    def publish_ppp_status(self):
+        if self.ppp_cache is None:
+            return
+        msg = PppNav()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "gps"
+        msg.pos_type    = self.ppp_cache['pos_type']
+        msg.lat_sd      = self.ppp_cache['lat_sd']
+        msg.lon_sd      = self.ppp_cache['lon_sd']
+        msg.alt_sd      = self.ppp_cache['alt_sd']
+        msg.sol_age     = self.ppp_cache['sol_age']
+        msg.num_tracked = min(self.ppp_cache['num_tracked'], 255)
+        msg.num_used    = min(self.ppp_cache['num_used'], 255)
+        msg.valid       = self.ppp_cache['valid']
+        self.ppp_pub.publish(msg)
+
     def get_gps_quat(self, dev_name, country_id):
         # interface with sensor device(as a serial port)
+        self.ppp_cache = None
         try:
             serial_port = serial.Serial(dev_name, self.serial_baud, timeout=0.5)
         except serial.SerialException as serialerror:
@@ -170,6 +216,10 @@ class GPSData(Node):
 
         while(1):
             line_heading = serial_port.readline()
+            ppp = self.parse_pppnava(line_heading)
+            if ppp is not None:
+                self.ppp_cache = ppp
+
             #self.get_logger().info(f"line: {line}")
             talker_ID_indoor = line_heading.find(initial_letters_indoor)
             talker_ID_outdoor = line_heading.find(initial_letters_outdoor)            
@@ -178,7 +228,10 @@ class GPSData(Node):
                 #line = line[(talker_ID_indoor-1):]
                 gps_data = line_heading.split(b",")
                 #self.get_logger().info(f"gps_data: {gps_data}")
-                heading = float(gps_data[1])
+                if gps_data[1] ==b'':
+                    heading = 0.0
+                else:
+                    heading = float(gps_data[1])
                 if heading is None:
                     self.get_logger().error("not GPS heading data")
                     heading = 0
@@ -188,7 +241,10 @@ class GPSData(Node):
                 #line = line[(talker_ID_outdoor-1):]
                 gps_data = line_heading.split(b",")
                 #self.get_logger().info(f"gps_data: {gps_data}")
-                heading = float(gps_data[1])
+                if gps_data[1] ==b'':
+                    heading = 0.0
+                else:
+                    heading = float(gps_data[1])
                 if heading is None:
                     self.get_logger().error("not GPS heading data")
                     heading = 0
@@ -223,6 +279,9 @@ class GPSData(Node):
         talker_ID = -1
         while time.time() < gga_deadline:
             line_latlon = serial_port.readline()
+            ppp = self.parse_pppnava(line_latlon)
+            if ppp is not None:
+                self.ppp_cache = ppp
             talker_ID = line_latlon.find(initial_letters)
             if talker_ID != -1:
                 break
@@ -260,6 +319,7 @@ class GPSData(Node):
             self.get_logger().error("!--GGA not found within timeout--!")        
         
         serial_port.close()
+        self.publish_ppp_status()
         
         #self.publish_raw_latlon(line_latlon)
         #self.publish_raw_heading(line_heading)
