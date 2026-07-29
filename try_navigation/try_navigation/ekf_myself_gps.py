@@ -57,6 +57,7 @@ class ExtendedKalmanFilter(Node):
         self.offsetyaw_bad_gps = 0
         self.angular_z = 0
         self.theta_buff = 0
+        self.theta_diff_thresh = 40 # 角度補正カウントリセット用閾値 [°]
 
         #pd init
         self.e_n = 0.1;
@@ -463,7 +464,7 @@ class ExtendedKalmanFilter(Node):
                 yaw_GTheta -= 2 * np.pi
             # 直進を判定
             theta_diff = abs(yaw_GTheta - self.theta_buff)
-            if theta_diff < math.radians(10):
+            if theta_diff < math.radians(self.theta_diff_thresh):
                 straight = True
             else:
                 straight = False
