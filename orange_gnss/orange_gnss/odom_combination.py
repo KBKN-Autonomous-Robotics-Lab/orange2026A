@@ -30,6 +30,12 @@ class Odom_Combination(Node):
         
         self.position_x = 0.0
         self.position_y = 0.0
+        self.linear_x = 0.0
+        self.linear_y = 0.0
+        self.linear_z = 0.0
+        self.angular_x = 0.0
+        self.angular_y = 0.0
+        self.angular_z = 0.0
         self.theta_z = 0.0
         self.theta = 0.0
         self.initial_xy = None #(0.0, 0.0)
@@ -44,6 +50,12 @@ class Odom_Combination(Node):
         x, y, z, w = msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w
         roll, pitch, yaw = quaternion_to_euler(x, y, z, w)
         self.theta_z = yaw  # radian
+        self.linear_x = msg.twist.twist.linear.x
+        self.linear_y = msg.twist.twist.linear.y
+        self.linear_z = msg.twist.twist.linear.z
+        self.angular_x = msg.twist.twist.angular.x
+        self.angular_y = msg.twist.twist.angular.y
+        self.angular_z = msg.twist.twist.angular.z
     
     # /odom/UM982 callback
     def get_gps_odom(self, msg):
@@ -70,6 +82,13 @@ class Odom_Combination(Node):
             
         pos_x = self.position_x
         pos_y = self.position_y
+        lin_x = self.linear_x
+        lin_y = self.linear_y
+        lin_z = self.linear_z
+        ang_x = self.angular_x
+        ang_y = self.angular_y
+        ang_z = self.angular_z
+
         #degree_to_radian = math.pi / 180
         #pos_theta = self.theta * degree_to_radian # maybe -self.theta * degree_to_radian
         pos_theta = self.theta_z + self.init_theta
@@ -99,6 +118,12 @@ class Odom_Combination(Node):
         odom_msg.pose.pose.orientation.y = 0.0
         odom_msg.pose.pose.orientation.z = float(odom_orientation[0])
         odom_msg.pose.pose.orientation.w = float(odom_orientation[1])
+        odom_msg.twist.twist.linear.x = lin_x
+        odom_msg.twist.twist.linear.y = lin_y
+        odom_msg.twist.twist.linear.z = lin_z
+        odom_msg.twist.twist.angular.x = ang_x
+        odom_msg.twist.twist.angular.y = ang_y
+        odom_msg.twist.twist.angular.z = ang_z
 
         # publish
         self.odom_pub.publish(odom_msg)        

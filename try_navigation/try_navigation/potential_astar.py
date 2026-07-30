@@ -2,6 +2,7 @@
 import rclpy
 # rclpy (ROS 2のpythonクライアント)の機能のうちNodeを簡単に使えるようにします。こう書いていない場合、Nodeではなくrclpy.node.Nodeと書く必要があります。
 from rclpy.node import Node
+from rclpy.duration import Duration
 # ROS 2の文字列型を使えるようにimport
 import std_msgs.msg as std_msgs
 import sensor_msgs.msg as sensor_msgs
@@ -378,11 +379,12 @@ class PotentialAStar(Node):
         #print(f"t_stamp ={t_stamp}")
         
         #get pcd data
-        try:
-            transform = self.tf_buffer.lookup_transform("odom", "livox_frame", rclpy.time.Time.from_msg(msg.header.stamp))
-        except TransformException as ex:
-            self.get_logger().warn(f"TF lookup failed: {ex}")
-            return      
+        #try:
+            #transform = self.tf_buffer.lookup_transform("odom", "livox_frame", rclpy.time.Time.from_msg(msg.header.stamp))
+        #    transform = self.tf_buffer.lookup_transform("odom", "livox_frame", rclpy.time.Time.from_msg(msg.header.stamp), timeout=Duration(seconds=0.05))
+        #except TransformException as ex:
+        #    self.get_logger().warn(f"TF lookup failed: {ex}")
+        #    return      
               
         #global_points = do_transform_cloud(msg, transform)
 
@@ -523,12 +525,12 @@ class PotentialAStar(Node):
         print(f"obs_points ={obs_points.shape}")
         reflect_set = obs_points[2,~pd.DataFrame({"x":points_round[0,:], "y":points_round[1,:]}).duplicated()]
         #obs global
-        #obs_xy_rot, obs_rot_matrix = rotation_xyz(obs_xy_local, self.theta_x, self.theta_y, self.theta_z)
-        #obs_x_grobal = obs_xy_rot[0,:] + self.position_x
-        #obs_y_grobal = obs_xy_rot[1,:] + self.position_y
-        #obs_global = np.vstack((obs_x_grobal, obs_y_grobal, obs_xy_local[2,:], reflect_set) , dtype=np.float32)
-        obs_cloud = point_cloud_intensity_msg(np.vstack((obs_xy_local[0], obs_xy_local[1], obs_xy_local[2], reflect_set)).T, t_stamp, 'livox_frame')
-        obs_global = do_transform_cloud(obs_cloud, transform)
+        obs_xy_rot, obs_rot_matrix = rotation_xyz(obs_xy_local, self.theta_x, self.theta_y, self.theta_z)
+        obs_x_grobal = obs_xy_rot[0,:] + self.position_x
+        obs_y_grobal = obs_xy_rot[1,:] + self.position_y
+        obs_global = np.vstack((obs_x_grobal, obs_y_grobal, obs_xy_local[2,:], reflect_set) , dtype=np.float32)
+        #obs_cloud = point_cloud_intensity_msg(np.vstack((obs_xy_local[0], obs_xy_local[1], obs_xy_local[2], reflect_set)).T, t_stamp, 'livox_frame')
+        #obs_global = do_transform_cloud(obs_cloud, transform)
         print(f"obs_xy ={obs_xy.shape}")
         #print(f"obs_global ={obs_global.shape}")
         #print(f"obs_global ={obs_global.dtype}")
@@ -550,8 +552,8 @@ class PotentialAStar(Node):
         potential_astar_path = path_msg(astar_path_grobal, t_stamp, 'odom')
         self.potential_astar_path_publisher.publish(potential_astar_path)    
         #global obs rviz2
-        #obs_global_msg = point_cloud_intensity_msg(obs_global.T, t_stamp, 'odom')
-        self.pcd_obs_global_publisher.publish(obs_global) 
+        obs_global_msg = point_cloud_intensity_msg(obs_global.T, t_stamp, 'odom')
+        self.pcd_obs_global_publisher.publish(obs_global_msg) 
 		
     def path_plan(self, obs_xy_raw):
         #process: 検索マップ準備

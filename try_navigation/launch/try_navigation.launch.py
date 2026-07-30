@@ -25,7 +25,7 @@ def generate_launch_description():
     odom = LaunchConfiguration('odom')
     declare_odom_arg = DeclareLaunchArgument(
         'odom',
-        default_value='/odom_ekf_match', # odom_ekf_match
+        default_value='/fusion/odom', # odom_ekf_match
         description='Odometry topic name'
     )
     
