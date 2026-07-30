@@ -78,7 +78,7 @@ class PotentialAStar(Node):
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         self.subscription = self.create_subscription(geometry_msgs.PoseArray,'/current_waypoint', self.get_waypoint, qos_profile_sub)
         self.waypoint_number_subscription = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
-        #self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         #self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
         #self.tire_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/tire_points', self.get_tire_obs, qos_profile)
         self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
@@ -457,7 +457,7 @@ class PotentialAStar(Node):
         z_radius = 0 * np.cos(angles)
         self_radius_points = np.vstack((x_radius, y_radius, z_radius))
         
-        """
+        
         #map_obs add
         if len(self.map_obs_points[0,:])>0:
             relative_point_x = self.map_obs_points[0,:] - self.position_x
@@ -466,7 +466,7 @@ class PotentialAStar(Node):
             relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
         else:
             relative_point_rot = np.array([[],[],[]])
-        """    
+            
         
         # make map_obs   x1  x2  y1  y2
         obs1 = make_obs(-45, 25, 97, 94) # siyakusyoura minami
@@ -474,7 +474,7 @@ class PotentialAStar(Node):
         obs3 = make_obs(-73,-75, 105, 29) # siyakusyo nisi
 
         self.tsukuba_obs = np.hstack((obs1, obs2, obs3))
-        
+        '''
         #map_obs add
         if len(self.tsukuba_obs[0,:])>0:
             relative_point_x = self.tsukuba_obs[0,:] - self.position_x
@@ -483,6 +483,7 @@ class PotentialAStar(Node):
             relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, self.theta_x, self.theta_y, -self.theta_z)
         else:
             relative_point_rot = np.array([[],[],[]])
+        '''
         ###################################
                 
         #obs round&duplicated  :grid_size before:28239 after100:24592 after50:8894 after10:3879
