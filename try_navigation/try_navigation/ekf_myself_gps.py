@@ -458,12 +458,13 @@ class ExtendedKalmanFilter(Node):
             self.get_logger().info(f"++ RR_count_bad: {self.RR_count_bad}++")
             
             yaw_GTheta = self.GTheta % (360/180*math.pi)
-            if yaw_GTheta < -np.pi:
-                yaw_GTheta += 2 * np.pi
-            elif yaw_GTheta > np.pi:
-                yaw_GTheta -= 2 * np.pi
+            theta_diff = yaw_GTheta - self.theta_buff
+            if theta_diff < -np.pi:
+                theta_diff += 2 * np.pi
+            elif theta_diff > np.pi:
+                theta_diff -= 2 * np.pi
             # 直進を判定
-            theta_diff = abs(yaw_GTheta - self.theta_buff)
+            theta_diff = abs(theta_diff)
             if theta_diff < math.radians(self.theta_diff_thresh):
                 straight = True
             else:
