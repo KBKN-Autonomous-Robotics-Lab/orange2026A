@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import math
-
 import numpy as np
 import rclpy
 import tf2_ros
@@ -9,6 +8,7 @@ from nav_msgs.msg import Odometry
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.time import Time
+from orange_msgs.msg import PppNav
 
 
 class ExtendedKalmanFilter(Node):
@@ -68,14 +68,21 @@ class ExtendedKalmanFilter(Node):
         ###IGVC20250530 add########
         self.set_yaw_satellites_no =4  #satellite count
         self.set_yaw_count =100 #n/Hz =s
-        
+
+        ### PPP sigma based R ###
+        self.ppp_sigma = None      # 有効なσ[m]。未受信・invalid なら None
+        self.ppp_valid = False
+        self.ppp_sigma_max = 1.5   # これを超えたら GPS を観測に入れない
 
         self.sub_a = self.create_subscription(
             Odometry, '/odom/combine', self.sensor_a_callback, 10) # /odom/wheel_spimu combine
         self.sub_b = self.create_subscription(
             Odometry, '/odom/UM982', self.sensor_b_callback, 10)
+        self.sub_ppp = self.create_subscription(
+            PppNav, '/gnss/ppp_status', self.ppp_callback, 10)
         #self.sub_b = self.create_subscription(
         #    Odometry, '/odom_ref_slam', self.sensor_b_callback, 10)
+
 
         self.declare_parameter("ekf_publish_TF", True)
         self.ekf_publish_TF = self.get_parameter(
@@ -108,6 +115,15 @@ class ExtendedKalmanFilter(Node):
         orientation_w = np.cos(yaw / 2.0)
         return orientation_z, orientation_w
 
+    def ppp_callback(self, msg):
+        self.ppp_valid = msg.valid
+        if msg.valid and msg.lat_sd > 0.0 and msg.lon_sd > 0.0:
+            # 南北σと東西σの大きい方を採用
+            self.ppp_sigma = max(msg.lat_sd, msg.lon_sd)
+        else:
+            self.ppp_sigma = None
+        self.get_logger().info(f"ppp sigma: {self.ppp_sigma} valid: {self.ppp_valid}")
+    
     def sensor_a_callback(self, data):
 
         # current_time = self.get_clock().now().to_msg()
@@ -193,6 +209,46 @@ class ExtendedKalmanFilter(Node):
             else:
                 self.gps_rr_flag = 1
                 self.offsetyaw_bad_gps = 0
+
+        ### PPP sigma based R (phase3) ###
+        # 矩形で 0 にされた場合は最優先。σは見ない
+        sigma_usable = (self.ppp_sigma is not None)
+        if self.gps_rr_flag == 1 and sigma_usable:
+            if self.ppp_sigma > self.ppp_sigma_max:
+                self.gps_rr_flag = 0        # σが論外に大きい → デッドレコ
+                self.GPS_angle_conut = 0    # 方位補正も止める（矩形側と同じ扱い）
+
+        if self.gps_rr_flag == 0:  # Bad → デッドレコニング（RはKalfXYで未使用）
+            self.R1 = 1.00**2
+            self.R2 = 1.00**2
+            self.R3 = 9     # GTheta
+            self.R4 = 1     # GPStheta
+            self.RR_count_bad = 50
+        elif sigma_usable:  # σベース連続R制御
+            self.RR_count_bad += -1
+            r = self.ppp_sigma**2
+            if self.RR_count_bad > 0:
+                r = max(r, 1.00**2)   # bad区間直後の5秒は従来同様に慎重に
+            self.R1 = r
+            self.R2 = r
+            self.R3 = 2     # GTheta
+            self.R4 = 8     # GPStheta
+        else:  # σ未受信 or invalid → 従来ロジックにフォールバック
+            self.RR_count_bad += -1
+            if self.RR_count_bad <= 0:
+                self.R1 = 0.17**2
+                self.R2 = 0.17**2
+            else:
+                self.R1 = 1.00**2
+                self.R2 = 1.00**2
+            self.R3 = 2     # GTheta
+            self.R4 = 8     # GPStheta
+
+        self.get_logger().info(
+            f"R mode: {'sigma' if (self.gps_rr_flag==1 and sigma_usable) else ('legacy' if self.gps_rr_flag==1 else 'deadreck')} "
+            f"sigma={self.ppp_sigma} R1={self.R1:.4f}")
+
+        '''
         #GPS受信精度が悪い場合のR指定 
         if self.gps_rr_flag == 0:  # Bad
             #self.R1 = 0.17**2  # FAST-LIO
@@ -221,6 +277,7 @@ class ExtendedKalmanFilter(Node):
                 self.R2 = 1.00**2  # CLAS-movingbase
                 self.R3 = 2     # GTheta
                 self.R4 = 8     # GPStheta
+        '''
         '''
         if 0 <= self.Number_of_satellites < 22:  # Bad
             #self.R1 = 0.17**2  # FAST-LIO
