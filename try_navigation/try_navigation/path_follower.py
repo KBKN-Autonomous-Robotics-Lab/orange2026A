@@ -116,6 +116,8 @@ class PathFollower(Node):
         self.target_dist = 1.2
         self.target_dist_near = 0.4
         self.stop_flag = 1
+        self.rotation_flag = 0
+        self.target_yaw = 0.0
         
         #pd init
         self.e_n = 0;
@@ -131,28 +133,29 @@ class PathFollower(Node):
         self.stop_xy_test_flag = 1
         
         self.stop_xy = np.array([ 
-            #xmin,   xmax,  ymin,  ymax,flag, line
-            [ -30.0, -3.0, -20.0,  20.0, 1.0, 1.0], #nakaniwa test
-            [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0], #shiyakusyo 1 tsukuba2026
-            [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0], #shiyakusyo 2 tsukuba2026
-            [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0], #shiyakusyo
-            [100.0, 101.0,  25.0,  45.0, 1.0, 0.0], #dourotan1
-            [177.7, 178.7,  25.0,  45.0, 1.0, 0.0], #dourotan2
-            [257.5, 277.5, -60.0, -59.0, 1.0, 1.0], #singoumaeteisisen1
-            [257.5, 277.5, -66.5, -65.5, 1.0, 0.0], #singoumae1
-            [256.5, 276.5, -86.2, -85.2, 1.0, 1.0], #singoumaeteisisen2
-            [270.3, 271.3, -99.0, -79.5, 1.0, 0.0], #singoumae2
-            [405.0, 425.0, -80.2, -79.2, 1.0, 0.0], #ekimae oudanhodou1 y-1
-            [545.0, 568.0, -85.0, -60.0, 0.0, 0.0], #ekimae not stop
-            [410.0, 417.0, -71.5, -70.5, 1.0, 0.0], #ekimae oudanhodou2 y-2
-            [290.6, 291.6, -98.0, -78.0, 1.0, 1.0], #singoumaeteisisen3
-            [284.3, 285.3, -98.0, -78.0, 1.0, 0.0], #singoumae3
-            [259.5, 279.5, -83.7, -82.7, 1.0, 1.0], #singoumaeteisisen4 12
-            [259.5, 279.5, -80.3, -79.3, 1.0, 0.0], #singoumae4 13
-            [185.0, 186.0,  25.0,  45.0, 1.0, 0.0], #dourotan3
-            [107.5, 108.5,  25.0,  45.0, 1.0, 0.0], #dourotan4
-            [ 64.0, 104.0, -30.0, -25.0, 1.0, 0.0], #GOAL!!!!
-            [  999,   999,   999,   999, 0.0, 0.0] ]) #
+            #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
+            [-30.0,  -3.0, -20.0,  20.0, 1.0, 1.0,  0.0], #nakaniwa test
+            [ -3.0,  13.0, -40.0, -30.0, 1.0, 1.0, 90.0], #nakaniwa test2
+            [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0,  0.0], #shiyakusyo 1 tsukuba2026
+            [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
+            [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
+            [100.0, 101.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan1
+            [177.7, 178.7,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan2
+            [257.5, 277.5, -60.0, -59.0, 1.0, 1.0,  0.0], #singoumaeteisisen1
+            [257.5, 277.5, -66.5, -65.5, 1.0, 0.0,  0.0], #singoumae1
+            [256.5, 276.5, -86.2, -85.2, 1.0, 1.0,  0.0], #singoumaeteisisen2
+            [270.3, 271.3, -99.0, -79.5, 1.0, 0.0,  0.0], #singoumae2
+            [405.0, 425.0, -80.2, -79.2, 1.0, 0.0,  0.0], #ekimae oudanhodou1 y-1
+            [545.0, 568.0, -85.0, -60.0, 0.0, 0.0,  0.0], #ekimae not stop
+            [410.0, 417.0, -71.5, -70.5, 1.0, 0.0,  0.0], #ekimae oudanhodou2 y-2
+            [290.6, 291.6, -98.0, -78.0, 1.0, 1.0,  0.0], #singoumaeteisisen3
+            [284.3, 285.3, -98.0, -78.0, 1.0, 0.0,  0.0], #singoumae3
+            [259.5, 279.5, -83.7, -82.7, 1.0, 1.0,  0.0], #singoumaeteisisen4 12
+            [259.5, 279.5, -80.3, -79.3, 1.0, 0.0,  0.0], #singoumae4 13
+            [185.0, 186.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan3
+            [107.5, 108.5,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan4
+            [ 64.0, 104.0, -30.0, -25.0, 1.0, 0.0,  0.0], #GOAL!!!!
+            [  999,   999,   999,   999, 0.0, 0.0,  0.0] ]) #
         self.stop_num = 0;
         
         #obs
@@ -528,6 +531,23 @@ class PathFollower(Node):
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
             #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
             #twist_msg.angular.z = -target_rad_pd # 角速度 (rad/s) back left to left
+        elif self.rotation_flag == 1:
+            yaw_error = self.target_yaw - self.ref_theta_z
+            if yaw_error > 180:
+                yaw_error -= 360
+            elif yaw_error < -180:
+                yaw_error += 360
+            if abs(yaw_error) > 5: # [deg]
+                if yaw_error > 0:
+                    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                    twist_msg.angular.z = 0.3  # 角速度 (rad/s)
+                else:
+                    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                    twist_msg.angular.z = -0.3  # 角速度 (rad/s)
+            else:
+                twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                twist_msg.angular.z = 0.0  # 角速度 (rad/s)
+                self.rotation_flag = 0
         else:
             twist_msg.linear.x = 0.0  # 前進速度 (m/s)
             twist_msg.angular.z = 0.0  # 角速度 (rad/s)
@@ -618,6 +638,10 @@ class PathFollower(Node):
                     self.stop_flag = 1;
                     navigation_status = "STOP"
                     #print(self.stop_num)
+                    if self.stop_xy[self.stop_num,6] != 0:
+                        self.rotation_flag = 1
+                        self.target_yaw = self.stop_xy[self.stop_num, 6]
+                        self.get_logger().info('####### rotation on %f #######' % (self.target_yaw))
                 else:
                     self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
                 self.stop_num = self.stop_num + 1;     
