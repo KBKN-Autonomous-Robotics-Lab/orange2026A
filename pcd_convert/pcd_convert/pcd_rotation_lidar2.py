@@ -47,7 +47,7 @@ class PcdRotation(Node):
             
         #上下反転  LiDAR init
         self.THETA_INIT_X = 0 #[deg]-180
-        self.THETA_INIT_Y = -0.4456305712765264 #self.THETA_INIT_Y =0.05435636478316808#[deg] -0.4456305712765264
+        self.THETA_INIT_Y = -0.1774  #-0.4456305712765264#self.THETA_INIT_Y =0.05435636478316808#[deg] -0.4456305712765264
         self.THETA_INIT_Z = -2 #[deg]  
         
         #initialize calibration
