@@ -55,6 +55,9 @@ class ExtendedKalmanFilter(Node):
         self.kalf_speed_param_noGPS = 1.00
         self.gps_rr_flag = 1
         self.offsetyaw_bad_gps = 0
+        self.angular_z = 0
+        self.theta_buff = 0
+        self.theta_diff_thresh = 40 # 角度補正カウントリセット用閾値 [°]
 
         #pd init
         self.e_n = 0.1;
@@ -74,7 +77,7 @@ class ExtendedKalmanFilter(Node):
         #self.sub_b = self.create_subscription(
         #    Odometry, '/odom_ref_slam', self.sensor_b_callback, 10)
 
-        self.declare_parameter("ekf_publish_TF", False)
+        self.declare_parameter("ekf_publish_TF", True)
         self.ekf_publish_TF = self.get_parameter(
             "ekf_publish_TF").get_parameter_value().bool_value
 
@@ -134,6 +137,8 @@ class ExtendedKalmanFilter(Node):
 
         self.GTheta = self.orientation_to_yaw(
             data.pose.pose.orientation.z, data.pose.pose.orientation.w)
+        
+        self.angular_z = data.twist.twist.angular.z
         
         # initialize odom
         if not self.is_initialized and self.SmpTime is not None and self.SmpTime > 0: 
@@ -452,8 +457,23 @@ class ExtendedKalmanFilter(Node):
             self.R4 = R[3]
             self.get_logger().info(f"++ RR_count_bad: {self.RR_count_bad}++")
             
+            yaw_GTheta = self.GTheta % (360/180*math.pi)
+            theta_diff = yaw_GTheta - self.theta_buff
+            if theta_diff < -np.pi:
+                theta_diff += 2 * np.pi
+            elif theta_diff > np.pi:
+                theta_diff -= 2 * np.pi
+            # 直進を判定
+            theta_diff = abs(theta_diff)
+            if theta_diff < math.radians(self.theta_diff_thresh):
+                straight = True
+            else:
+                straight = False
+                self.theta_buff = yaw_GTheta
+
             #if self.Number_of_satellites >= 28: 
             #GPSの受信衛星整数が多い（≒精度が良い？としている）場合に角度補正を行う
+            #直進時のみ角度補正を行う
             #現状はカルマンフィルタとは別に、受信精度がいい時のGPS方位とオドメトリの角度の値をストックし、
             #そのストックした値の差分の中央値（GPS方位-オドメトリ方位　の10秒分（100回/10Hz））のデータの中央値）を
             #オフセット角度として保存・更新し、足して補正してる状態。
@@ -469,6 +489,13 @@ class ExtendedKalmanFilter(Node):
                 if self.GPS_angle_reset_count > 20:
                     self.GPS_angle_conut = 0
                     self.GPS_angle_reset_count = 0
+            
+            # 直進時以外の時は補正せず、リセット
+            if not straight:
+                self.GPS_angle_conut = 0
+                self.GPS_angle_reset_count = 0
+                self.diff_yaw_buff = []
+
             #一定回数（self.set_yaw_count）以上になったらカウントリセットし、角度差分の中央値をオフセットとして補正
             if self.GPS_angle_conut > self.set_yaw_count:
                 yaw_offset_list = list(self.diff_yaw_buff)
@@ -478,6 +505,7 @@ class ExtendedKalmanFilter(Node):
                     self.offsetyaw += 2 * np.pi
                 elif self.offsetyaw > np.pi:
                     self.offsetyaw -= 2 * np.pi
+                self.theta_buff = yaw_GTheta
                 self.GPS_angle_conut = 0
                 self.diff_yaw_buff = []
                 self.get_logger().info(f"!!!!!!!!!!!!!!!!!!!!!! offsetyaw: {self.offsetyaw}!!!!!!!!!!!!!!!!!!!!!!!!!!")
