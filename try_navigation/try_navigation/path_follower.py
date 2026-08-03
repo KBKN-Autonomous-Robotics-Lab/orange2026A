@@ -537,13 +537,17 @@ class PathFollower(Node):
                 yaw_error -= 360
             elif yaw_error < -180:
                 yaw_error += 360
+            yaw_error_rad = math.radians(yaw_error)
+            yaw_error_rad_pd = self.yaw_sensim0(yaw_error_rad)
             if abs(yaw_error) > 5: # [deg]
-                if yaw_error > 0:
-                    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
-                    twist_msg.angular.z = 0.3  # 角速度 (rad/s)
-                else:
-                    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
-                    twist_msg.angular.z = -0.3  # 角速度 (rad/s)
+                twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                twist_msg.angular.z = yaw_error_rad_pd  # 角速度 (rad/s)
+                #if yaw_error > 0:
+                #    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                #    twist_msg.angular.z = 0.3  # 角速度 (rad/s)
+                #else:
+                #    twist_msg.linear.x = 0.0  # 前進速度 (m/s)
+                #    twist_msg.angular.z = -0.3  # 角速度 (rad/s)
             else:
                 twist_msg.linear.x = 0.0  # 前進速度 (m/s)
                 twist_msg.angular.z = 0.0  # 角速度 (rad/s)
@@ -592,6 +596,15 @@ class PathFollower(Node):
         self.e_n = steering
         steering = (self.k_p * self.e_n + self.k_d*(self.e_n - self.e_n1))
         self.e_n1 = self.e_n
+        return steering
+    
+    def yaw_sensim0(self, steering):
+        if not self.start_rotation:
+            self.yaw_e_n1 = steering
+            self.start_rotation = True
+        self.yaw_e_n = steering
+        steering = (self.k_p * self.yaw_e_n + self.k_d*(self.yaw_e_n - self.yaw_e_n1))
+        self.yaw_e_n1 = self.yaw_e_n
         return steering
     
     def get_odom_ref(self, msg):
