@@ -57,7 +57,7 @@ class PathFollower(Node):
         )
 
         # set parameter (launch can change this parameter)
-        self.declare_parameter('odom', '/fusion/odom')
+        self.declare_parameter('odom', '/odom_ekf_match')
         
         # define parameter
         odom_topic = self.get_parameter('odom').get_parameter_value().string_value
@@ -135,7 +135,7 @@ class PathFollower(Node):
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
             [-30.0,  -3.0, -20.0,  20.0, 1.0, 1.0,  0.0], #nakaniwa test
-            [ -3.0,  13.0, -40.0, -30.0, 1.0, 1.0, 90.0], #nakaniwa test2
+            [  0.0,  10.0, -46.0, -36.0, 1.0, 0.0, 90.0], #nakaniwa test2
             [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0,  0.0], #shiyakusyo 1 tsukuba2026
             [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
             [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
@@ -185,6 +185,7 @@ class PathFollower(Node):
 
         # stop line
         self.stop_line = None
+        self.start_rotation = False
 
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
@@ -306,7 +307,7 @@ class PathFollower(Node):
                 # 境界まで近すぎる
                 error = safe_dist + self.boundary_distance
                 print("--- Roadside --- Befor target_theta[deg]:",target_theta)
-                target_rad = 1.0 * -error
+                target_rad = 1.0 * error
                 target_theta = (target_rad) * (180 / math.pi)
                 print("--- Roadside --- After target_theta[deg]:",target_theta)
         
