@@ -58,6 +58,13 @@ class GPSData(Node):
         #while not self.client.wait_for_service(timeout_sec=1.0):
         #    self.get_logger().info("service not available...")
 
+        # serial port (open once, keep open)
+        self.serial_port = None
+        try:
+            self.serial_port = serial.Serial(self.dev_name, self.serial_baud, timeout=0.5)
+        except serial.SerialException as e:
+            self.get_logger().error(f"Serial open failed: {e}")
+
         self.get_logger().info("Start get_lonlat quat node")
         self.get_logger().info("-------------------------")
         
@@ -152,6 +159,13 @@ class GPSData(Node):
             self.send_request()
         self.is_acquiring = False
 
+    @staticmethod
+    def deg_to_pseudo(deg):
+        """10進度 → 既存パイプラインの擬似単位 (dd + mm/100)"""
+        d = math.floor(abs(deg))
+        m = (abs(deg) - d) * 60.0
+        return math.copysign(d + m / 100.0, deg)
+
     def parse_pppnava(self, line):
         """bytes 1行を受け取り、#PPPNAVA ならdictを返す。非該当は None。"""
         idx = line.find(b'#PPPNAVA')
@@ -167,13 +181,17 @@ class GPSData(Node):
             pos_type = f[1].decode('ascii', errors='ignore')
             return {
                 'pos_type':    pos_type,
+                'latitude':    self.deg_to_pseudo(float(f[2])),
+                'longitude':   self.deg_to_pseudo(float(f[3])),
                 'lat_sd':      float(f[7]),
                 'lon_sd':      float(f[8]),
                 'alt_sd':      float(f[9]),
+                'diff_age':    float(f[11]),
                 'sol_age':     float(f[12]),
                 'num_tracked': int(f[13]),
                 'num_used':    int(f[14]),
                 'valid':       (pos_type != 'NONE'),
+                'raw':         line[idx:].decode('ascii', errors='ignore').strip(),
             }
         except (ValueError, IndexError):
             return None
@@ -185,6 +203,9 @@ class GPSData(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "gps"
         msg.pos_type    = self.ppp_cache['pos_type']
+        msg.latitude    = self.ppp_cache['latitude']
+        msg.longitude   = self.ppp_cache['longitude']
+        msg.diff_age    = self.ppp_cache['diff_age']
         msg.lat_sd      = self.ppp_cache['lat_sd']
         msg.lon_sd      = self.ppp_cache['lon_sd']
         msg.alt_sd      = self.ppp_cache['alt_sd']
@@ -195,13 +216,18 @@ class GPSData(Node):
         self.ppp_pub.publish(msg)
 
     def get_gps_quat(self, dev_name, country_id):
-        # interface with sensor device(as a serial port)
         self.ppp_cache = None
-        try:
-            serial_port = serial.Serial(dev_name, self.serial_baud, timeout=0.5)
-        except serial.SerialException as serialerror:
-            self.get_logger().error(f"Serial error: {serialerror}")
+        serial_port = self.serial_port
+        if serial_port is None or not serial_port.is_open:
+            self.get_logger().error("Serial port is not open")
             return None
+
+        # 溜まった行を読み切り、最新エポックから処理する
+        while serial_port.in_waiting > 0:
+            stale = serial_port.readline()
+            ppp = self.parse_pppnava(stale)
+            if ppp is not None:
+                self.ppp_cache = ppp
         
         # country info 
         if country_id == 0:   # Japan
@@ -214,7 +240,9 @@ class GPSData(Node):
         initial_letters_outdoor = b"$GNHDT"
         initial_letters_indoor = b"$GPHDT"
 
-        while(1):
+        heading = 0.0
+        hdt_deadline = time.time() + 2
+        while time.time() < hdt_deadline:
             line_heading = serial_port.readline()
             ppp = self.parse_pppnava(line_heading)
             if ppp is not None:
@@ -318,7 +346,6 @@ class GPSData(Node):
         else:
             self.get_logger().error("!--GGA not found within timeout--!")        
         
-        serial_port.close()
         self.publish_ppp_status()
         
         #self.publish_raw_latlon(line_latlon)
@@ -353,10 +380,15 @@ class GPSData(Node):
     def publish_raw_gps(self, line_latlon, line_heading):
         self.raw_latlon_msg.data = line_latlon.decode("ascii", errors="ignore").strip()
         self.raw_heading_msg.data = line_heading.decode("ascii", errors="ignore").strip()
-        self.raw_gps_msg.data = f"HDT:{self.raw_heading_msg},GGA:{self.raw_latlon_msg}"
+        ppp_raw = self.ppp_cache['raw'] if self.ppp_cache else ""
+        self.raw_gps_msg.data = (
+            f"HDT:{self.raw_heading_msg.data},"
+            f"GGA:{self.raw_latlon_msg.data},"
+            f"PPPNAVA:{ppp_raw}"
+        )
         self.raw_gps_pub.publish(self.raw_gps_msg)
         self.get_logger().info(f"Publish: {self.raw_gps_msg.data}")
-    
+
     def publish_raw_latlon(self, line):
         if line:
             self.raw_latlon_msg.data = line.decode("ascii", errors="ignore").strip()
@@ -379,6 +411,8 @@ def main(args=None):
     ros_thread = threading.Thread(target=rclpy.spin, args=(gpslonlat,))
     ros_thread.start()
     gpslonlat.root.mainloop()  # tkinter GUI表示
+    if gpslonlat.serial_port is not None and gpslonlat.serial_port.is_open:
+        gpslonlat.serial_port.close()
     gpslonlat.destroy_node()
     rclpy.shutdown()
 
