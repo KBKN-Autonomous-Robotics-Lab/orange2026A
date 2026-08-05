@@ -9,6 +9,8 @@ from std_msgs.msg import Header
 import threading
 import time
 from my_msgs.srv import Avglatlon
+import tf2_ros
+from geometry_msgs.msg import TransformStamped
 
 class Odom_Combination(Node):
     def __init__(self):
@@ -41,8 +43,18 @@ class Odom_Combination(Node):
         self.initial_xy = None #(0.0, 0.0)
         #self.Position_magnification = 1.0  # 必要なら調整
 
+        # tf
+        self.t = TransformStamped()
+        self.br = tf2_ros.TransformBroadcaster(self)
+        self.ekf_publish_TF = False
+
         self.timer = self.create_timer(0.1, self.combine)
     
+    def reset_tf_buffer(self): 
+        # キャッシュのクリアとして、Bufferのインスタンスを再作成 
+        self.br = tf2_ros.TransformBroadcaster(self) 
+        self.get_logger().info('TransformBroadcaster has been reset')
+
     # /odom callback
     def get_odom(self, msg):
         self.position_x = msg.pose.pose.position.x
@@ -125,6 +137,19 @@ class Odom_Combination(Node):
         odom_msg.twist.twist.angular.y = ang_y
         odom_msg.twist.twist.angular.z = ang_z
 
+        if self.ekf_publish_TF:
+            self.t.header.stamp = self.get_clock().now().to_msg()
+            self.t.header.frame_id = "odom"
+            self.t.child_frame_id = "base_footprint"
+            self.t.transform.translation.x = combined_x
+            self.t.transform.translation.y = combined_y
+            self.t.transform.translation.z = 0.0
+            self.t.transform.rotation.x = 0.0
+            self.t.transform.rotation.y = 0.0
+            self.t.transform.rotation.z = float(odom_orientation[0])
+            self.t.transform.rotation.w = float(odom_orientation[1])
+            self.br.sendTransform(self.t)
+
         # publish
         self.odom_pub.publish(odom_msg)        
 
@@ -147,6 +172,7 @@ def quaternion_to_euler(x, y, z, w):
 def main(args=None):
     rclpy.init(args=args)
     odom_combination = Odom_Combination()
+    odom_combination.reset_tf_buffer()
     rclpy.spin(odom_combination)
 
 if __name__ == '__main__':
