@@ -1,8 +1,6 @@
 std_msgs/Header header
 
 string  pos_type      # "NONE" / "PPP_CONVERGING" / "PPP"
-float64 latitude      # 緯度（PPPNAVA #3 → 擬似単位 dd+mm/100 に変換済み）
-float64 longitude     # 経度（PPPNAVA #4 → 擬似単位 dd+mm/100 に変換済み）
 float64 lat_sd        # 緯度σ [m]（PPPNAVA #8）
 float64 lon_sd        # 経度σ [m]（PPPNAVA #9）
 float64 alt_sd        # 高度σ [m]（PPPNAVA #10）
