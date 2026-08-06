@@ -51,7 +51,6 @@ class GPSData(Node):
         self.raw_gps_pub = self.create_publisher(String, '/gps_raw', 1)
         self.raw_gps_msg = String()
         self.ppp_pub = self.create_publisher(PppNav, '/gnss/ppp_status', 10)
-        self.ppp_cache = None
         
         # service client
         self.client = self.create_client(Avglatlon, 'send_avg_gps')
@@ -60,11 +59,27 @@ class GPSData(Node):
 
         # serial port (open once, keep open)
         self.serial_port = None
-        self.serial_lock = threading.Lock()
+
+        self.declare_parameter('cache_max_age', 3.0)
+        self.cache_max_age = self.get_parameter('cache_max_age').get_parameter_value().double_value
+
+        self.cache_lock = threading.Lock()
+        self.latest_gga = None
+        self.latest_gga_time = 0.0
+        self.latest_hdt = None
+        self.latest_hdt_time = 0.0
+        self.latest_ppp = None
+        self.latest_ppp_time = 0.0
+        self.ppp_seq = 0
+        self.published_ppp_seq = -1
+
         try:
-            self.serial_port = serial.Serial(self.dev_name, self.serial_baud, timeout=0.5)
+            self.serial_port = serial.Serial(self.dev_name, self.serial_baud, timeout=0.1)
         except serial.SerialException as e:
             self.get_logger().error(f"Serial open failed: {e}")
+        self.reader_stop = threading.Event()
+        self.reader_thread = threading.Thread(target=self.serial_reader_loop, daemon=True)
+        self.reader_thread.start()
 
         self.get_logger().info("Start get_lonlat quat node")
         self.get_logger().info("-------------------------")
@@ -137,28 +152,100 @@ class GPSData(Node):
         lat_sum = 0.0
         lon_sum = 0.0
         count = 0
+        last_used_time = 0.0
 
         start_time = time.time()
-        while time.time() - start_time < 10:  # 10 seconds
-            GPS_data = self.get_gps_quat(self.dev_name, self.country_id)
-            if GPS_data and GPS_data[1] != 0 and GPS_data[2] != 0:
-                lat_sum += GPS_data[1]
-                lon_sum += GPS_data[2]
-                #heading_sum += float(GPS_data[5])
-                count += 1
-            time.sleep(0.1)  # Slight delay to avoid overwhelming the GPS device
+        while time.time() - start_time < 10:
+            with self.cache_lock:
+                line = self.latest_gga
+                t    = self.latest_gga_time
+            if line is not None and t != last_used_time and (time.time() - t) <= self.cache_max_age:
+                last_used_time = t
+                parsed = self.parse_gga(line)
+                if parsed is not None and parsed[0] != 0:
+                    _, lat, lon, _, _ = parsed
+                    if lat != 0 and lon != 0:
+                        lat_sum += lat
+                        lon_sum += lon
+                        count += 1
+            time.sleep(0.1)
 
         if count > 0:
-            #self.initial_coordinate = [lat_sum / count, lon_sum / count] # calculate average
             self.initial_coordinate = self.start_GPS_coordinate
-            self.current_coordinate = [lat_sum / count, lon_sum / count] # for tsukuba
-            #self.theta = (heading_sum / count) - 90
+            self.current_coordinate = [lat_sum / count, lon_sum / count]
             self.initialized = True
             self.get_logger().info(f"Initial coordinate set to: {self.initial_coordinate}")
-            self.get_logger().info(f"current coordinate set to: {self.current_coordinate}")
+            self.get_logger().info(f"current coordinate set to: {self.current_coordinate} (n={count})")
             self.get_logger().info(f"Initial theta set to: {self.tsukuba_theta}")
             self.send_request()
+        else:
+            self.get_logger().error("GPS data not received. initialization failed")
         self.is_acquiring = False
+        
+    def serial_reader_loop(self):
+        """シリアルを常時読み、種類ごとに最新1件だけ保持する"""
+        hdt_headers = (b"$GNHDT", b"$GPHDT")
+        if self.country_id == 0:
+            gga_header = b"GNGGA"
+        elif self.country_id == 1:
+            gga_header = b"GPGGA"
+        else:
+            gga_header = None
+
+        while not self.reader_stop.is_set():
+            if self.serial_port is None or not self.serial_port.is_open:
+                time.sleep(0.5)
+                continue
+            try:
+                line = self.serial_port.readline()
+            except serial.SerialException as e:
+                self.get_logger().error(f"Serial read error: {e}")
+                time.sleep(0.5)
+                continue
+            if not line:
+                continue
+
+            now = time.time()
+
+            ppp = self.parse_pppnava(line)
+            if ppp is not None:
+                with self.cache_lock:
+                    self.latest_ppp = ppp
+                    self.latest_ppp_time = now
+                    self.ppp_seq += 1
+                continue
+
+            if any(h in line for h in hdt_headers):
+                with self.cache_lock:
+                    self.latest_hdt = line
+                    self.latest_hdt_time = now
+                continue
+
+            if gga_header is not None:
+                idx = line.find(gga_header)
+                if idx != -1:
+                    with self.cache_lock:
+                        self.latest_gga = line[max(idx - 1, 0):]
+                        self.latest_gga_time = now
+
+    def parse_gga(self, line):
+        """GGA1行 → (Fixtype, lat, lon, alt, satcount)。パース失敗は None"""
+        gps_data = line.split(b",")
+        try:
+            fixtype = int(gps_data[6])
+            if fixtype == 0:
+                return (0, 0, 0, 0, 0)
+            satcount = int(gps_data[7])
+            lat = float(gps_data[2]) / 100.0
+            if gps_data[3] == b"S":
+                lat *= -1
+            lon = float(gps_data[4]) / 100.0
+            if gps_data[5] == b"W":
+                lon *= -1
+            alt = float(gps_data[9])
+            return (fixtype, lat, lon, alt, satcount)
+        except (ValueError, IndexError):
+            return None
 
     def parse_pppnava(self, line):
         """bytes 1行を受け取り、#PPPNAVA ならdictを返す。非該当は None。"""
@@ -187,172 +274,66 @@ class GPSData(Node):
         except (ValueError, IndexError):
             return None
 
-    def publish_ppp_status(self):
-        if self.ppp_cache is None:
-            return
+    def publish_ppp_status(self, ppp):
+
         msg = PppNav()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "gps"
-        msg.pos_type    = self.ppp_cache['pos_type']
-        msg.diff_age    = self.ppp_cache['diff_age']
-        msg.lat_sd      = self.ppp_cache['lat_sd']
-        msg.lon_sd      = self.ppp_cache['lon_sd']
-        msg.alt_sd      = self.ppp_cache['alt_sd']
-        msg.sol_age     = self.ppp_cache['sol_age']
-        msg.num_tracked = min(self.ppp_cache['num_tracked'], 255)
-        msg.num_used    = min(self.ppp_cache['num_used'], 255)
-        msg.valid       = self.ppp_cache['valid']
+        msg.pos_type    = ppp['pos_type']
+        msg.diff_age    = ppp['diff_age']
+        msg.lat_sd      = ppp['lat_sd']
+        msg.lon_sd      = ppp['lon_sd']
+        msg.alt_sd      = ppp['alt_sd']
+        msg.sol_age     = ppp['sol_age']
+        msg.num_tracked = min(ppp['num_tracked'], 255)
+        msg.num_used    = min(ppp['num_used'], 255)
+        msg.valid       = ppp['valid']
         self.ppp_pub.publish(msg)
 
     def get_gps_quat(self, dev_name, country_id):
-        self.ppp_cache = None
-        serial_port = self.serial_port
-        if serial_port is None or not serial_port.is_open:
-            self.get_logger().error("Serial port is not open")
+        now = time.time()
+        with self.cache_lock:
+            line_latlon  = self.latest_gga
+            gga_age      = now - self.latest_gga_time
+            line_heading = self.latest_hdt
+            hdt_age      = now - self.latest_hdt_time
+            ppp          = self.latest_ppp
+            ppp_seq      = self.ppp_seq
+
+        # PPPNAVA は新着があったときだけ publish
+        if ppp is not None and ppp_seq != self.published_ppp_seq:
+            self.publish_ppp_status(ppp)
+            self.published_ppp_seq = ppp_seq
+
+        if line_latlon is None or gga_age > self.cache_max_age:
+            self.get_logger().error("!--GGA stale or not received--!")
             return None
 
-        if not self.serial_lock.acquire(timeout=3.0):
-            self.get_logger().warn("Serial busy, skip this cycle")
-            return None
-
-        try:
-            # 溜まった行を読み切り、最新エポックから処理する
-            while serial_port.in_waiting > 0:
-                stale = serial_port.readline()
-                ppp = self.parse_pppnava(stale)
-                if ppp is not None:
-                    self.ppp_cache = ppp
-            
-            # country info 
-            if country_id == 0:   # Japan
-                initial_letters = b"GNGGA"
-            elif country_id == 1: # USA
-                initial_letters = b"GPGGA"
-            else:                 # not certain
-                initial_letters = None
-            
-            initial_letters_outdoor = b"$GNHDT"
-            initial_letters_indoor = b"$GPHDT"
-
-            heading = 0.0
+        heading = 0.0
+        if line_heading is not None and hdt_age <= self.cache_max_age:
+            hdt_fields = line_heading.split(b",")
+            if len(hdt_fields) > 1 and hdt_fields[1] != b'':
+                try:
+                    heading = float(hdt_fields[1])
+                except ValueError:
+                    heading = 0.0
+        else:
             line_heading = b""
-            hdt_deadline = time.time() + 2
-            while time.time() < hdt_deadline:
-                line_heading = serial_port.readline()
-                ppp = self.parse_pppnava(line_heading)
-                if ppp is not None:
-                    self.ppp_cache = ppp
+            self.get_logger().warn("HDT stale or not received")
 
-                #self.get_logger().info(f"line: {line}")
-                talker_ID_indoor = line_heading.find(initial_letters_indoor)
-                talker_ID_outdoor = line_heading.find(initial_letters_outdoor)            
-                if talker_ID_indoor != -1:
-                    #self.get_logger().info("GPHDT ok")
-                    #line = line[(talker_ID_indoor-1):]
-                    gps_data = line_heading.split(b",")
-                    #self.get_logger().info(f"gps_data: {gps_data}")
-                    if gps_data[1] ==b'':
-                        heading = 0.0
-                    else:
-                        heading = float(gps_data[1])
-                    if heading is None:
-                        self.get_logger().error("not GPS heading data")
-                        heading = 0
-                    break
-                if talker_ID_outdoor != -1:
-                    #self.get_logger().info("GNHDT ok")
-                    #line = line[(talker_ID_outdoor-1):]
-                    gps_data = line_heading.split(b",")
-                    #self.get_logger().info(f"gps_data: {gps_data}")
-                    if gps_data[1] ==b'':
-                        heading = 0.0
-                    else:
-                        heading = float(gps_data[1])
-                    if heading is None:
-                        self.get_logger().error("not GPS heading data")
-                        heading = 0
-                    break
+        parsed = self.parse_gga(line_latlon)
+        if parsed is None:
+            self.get_logger().error("!--GGA parse error--!")
+            parsed = (0, 0, 0, 0, 0)
+        Fixtype_data, latitude_data, longitude_data, altitude_data, satelitecount_data = parsed
+        if Fixtype_data == 0:
+            self.get_logger().error("!--not fix data--!")
 
-    #    gps_data = ["$G?GGA", 
-    #                "UTC time", 
-    #                "Latitude (ddmm.mmmmm)", 
-    #                "latitude type (south/north)", 
-    #                "Longitude (ddmm.mmmmm)", 
-    #                "longitude type (east longitude/west longitude)", 
-    #                "Fixtype", 
-    #                "Number of satellites used for positioning", 
-    #                "HDOP", 
-    #                "Altitude", 
-    #                "M(meter)", 
-    #                "Elevation", 
-    #                "M(meter)", 
-    #                "", 
-    #                "checksum"]
-        
-    #        line_latlon = serial_port.readline()
-    #        talker_ID = line_latlon.find(initial_letters)
-    #        if talker_ID != -1:
-            Fixtype_data = 0
-            latitude_data = 0
-            longitude_data = 0
-            altitude_data = 0
-            satelitecount_data = 0
-            line_latlon = b""
-
-            gga_deadline = time.time() + 2
-            talker_ID = -1
-            while time.time() < gga_deadline:
-                line_latlon = serial_port.readline()
-                ppp = self.parse_pppnava(line_latlon)
-                if ppp is not None:
-                    self.ppp_cache = ppp
-                talker_ID = line_latlon.find(initial_letters)
-                if talker_ID != -1:
-                    break
-            if talker_ID != -1:
-                line_latlon = line_latlon[(talker_ID-1):]
-                gps_data = line_latlon.split(b",")
-                Fixtype_data = int(gps_data[6])
-                if Fixtype_data != 0:
-                    satelitecount_data = int(gps_data[7])###
-                    if Fixtype_data != 0:
-                        latitude_data = float(gps_data[2]) / 100.0  # ddmm.mmmmm to dd.ddddd
-                        if gps_data[3] == b"S":#south
-                            latitude_data *= -1
-                        longitude_data = float(gps_data[4]) / 100.0  # ddmm.mmmmm to dd.ddddd
-                        if gps_data[5] == b"W":#west
-                            longitude_data *= -1
-                        altitude_data = float(gps_data[9])
-                    else :
-                        #not fix data
-                        Fixtype_data = 0
-                        latitude_data = 0
-                        longitude_data = 0
-                        altitude_data = 0
-                        satelitecount_data = 0
-                        self.get_logger().error("!--not fix data--!")
-                else :
-                #no GPS data
-                    Fixtype_data = 0
-                    latitude_data = 0
-                    longitude_data = 0
-                    altitude_data = 0
-                    satelitecount_data = 0
-                    self.get_logger().error("!--not GPS data--!")  
-            else:
-                self.get_logger().error("!--GGA not found within timeout--!")  
-        finally:
-            self.serial_lock.release()
-            
-        self.publish_ppp_status()
-            
-        #self.publish_raw_latlon(line_latlon)
-        #self.publish_raw_heading(line_heading)
         self.publish_raw_gps(line_latlon, line_heading)
-        self.save_csv(line_latlon,line_heading)
+        self.save_csv(line_latlon, line_heading)
 
-        gnggadata = (Fixtype_data,latitude_data,longitude_data,altitude_data,satelitecount_data,heading)
-        return gnggadata
+        return (Fixtype_data, latitude_data, longitude_data,
+                altitude_data, satelitecount_data, heading)
         
     def _open_new_csv(self):
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -407,6 +388,8 @@ def main(args=None):
     ros_thread = threading.Thread(target=rclpy.spin, args=(gpslonlat,))
     ros_thread.start()
     gpslonlat.root.mainloop()  # tkinter GUI表示
+    gpslonlat.reader_stop.set()                   
+    gpslonlat.reader_thread.join(timeout=2.0)      
     if gpslonlat.serial_port is not None and gpslonlat.serial_port.is_open:
         gpslonlat.serial_port.close()
     gpslonlat.destroy_node()
