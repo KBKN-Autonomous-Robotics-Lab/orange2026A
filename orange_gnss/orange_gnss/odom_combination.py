@@ -46,7 +46,7 @@ class Odom_Combination(Node):
         # tf
         self.t = TransformStamped()
         self.br = tf2_ros.TransformBroadcaster(self)
-        self.ekf_publish_TF = False
+        self.ekf_publish_TF = True
 
         self.timer = self.create_timer(0.1, self.combine)
     

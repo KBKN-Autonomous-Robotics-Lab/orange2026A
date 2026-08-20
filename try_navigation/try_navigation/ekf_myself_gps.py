@@ -77,7 +77,7 @@ class ExtendedKalmanFilter(Node):
         #self.sub_b = self.create_subscription(
         #    Odometry, '/odom_ref_slam', self.sensor_b_callback, 10)
 
-        self.declare_parameter("ekf_publish_TF", True)
+        self.declare_parameter("ekf_publish_TF", False)
         self.ekf_publish_TF = self.get_parameter(
             "ekf_publish_TF").get_parameter_value().bool_value
 
@@ -501,6 +501,8 @@ class ExtendedKalmanFilter(Node):
                 yaw_offset_list = list(self.diff_yaw_buff)
                 yaw_offset_median = sorted(yaw_offset_list)[len(yaw_offset_list) // 2]
                 self.offsetyaw = yaw_offset_median
+                #alpha = 0.05
+                #self.offsetyaw = (1 - alpha) * self.offsetyaw + alpha * yaw_offset_median
                 if self.offsetyaw < -np.pi:
                     self.offsetyaw += 2 * np.pi
                 elif self.offsetyaw > np.pi:
@@ -533,6 +535,7 @@ class ExtendedKalmanFilter(Node):
                 yaw1 = self.GTheta % (360/180*math.pi)
                 yaw2 = self.offsetyaw % (360/180*math.pi)
                 self.robot_yaw = yaw1 + yaw2 + self.offsetyaw_bad_gps
+                #self.robot_yaw = self.GTheta + self.offsetyaw + self.offsetyaw_bad_gps
                 ##########################
                 
                 if self.robot_yaw < -np.pi:

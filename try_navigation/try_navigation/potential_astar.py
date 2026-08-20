@@ -385,7 +385,7 @@ class PotentialAStar(Node):
         #except TransformException as ex:
         #    self.get_logger().warn(f"TF lookup failed: {ex}")
         #    return      
-              
+        
         #global_points = do_transform_cloud(msg, transform)
 
         points = self.pointcloud2_to_array(msg)
@@ -555,6 +555,7 @@ class PotentialAStar(Node):
         #global obs rviz2
         obs_global_msg = point_cloud_intensity_msg(obs_global.T, t_stamp, 'odom')
         self.pcd_obs_global_publisher.publish(obs_global_msg) 
+        #self.pcd_obs_global_publisher.publish(obs_global) 
 		
     def path_plan(self, obs_xy_raw):
         #process: 検索マップ準備

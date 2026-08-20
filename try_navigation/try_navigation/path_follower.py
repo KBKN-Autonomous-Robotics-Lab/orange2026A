@@ -192,7 +192,10 @@ class PathFollower(Node):
         # クライアントから送られたaをstop_flagに代入
         self.stop_flag = goal_handle.request.a
         print(f"stop_flag set to: {self.stop_flag}")
-        navigation_status = "GO"
+        if self.stop_flag == 0:
+            navigation_status = "GO"
+        else:
+            navigation_status = "STOP"
         
         # フィードバックの返信
         for i in range(1):
