@@ -118,7 +118,7 @@
   </include>-->
   <!-- GPSposition_publisher -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="get_gnss_data_ttyUSB" output="screen">
+  <!--<node pkg="orange_gnss" exec="get_gnss_data_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
@@ -126,7 +126,7 @@
     <param name="start_lat" value="$(var start_lat)"/>
     <param name="start_lon" value="$(var start_lon)"/>
     <param name="time_out" value="1.0"/>
-  </node>
+  </node>-->
   <node pkg="orange_gnss" exec="gnss_odom_publisher_ttyUSB" output="screen">
     <param name="Position_magnification" value="1.675"/>
     <param name="heading" value="$(var start_heading)"/>
