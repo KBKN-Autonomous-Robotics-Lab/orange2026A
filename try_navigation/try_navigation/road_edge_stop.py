@@ -13,6 +13,9 @@ road_edge_stop.py
 状態:
   /road_edge_stop/enable (Bool) が True の間だけ蓄積・判定を行う。
   停止フラグが立ったら enable が False に戻るまで判定を無効化する。
+
+可視化は viz_frame（既定 livox_frame）のローカル座標で publish する。
+蓄積時のみ odom を経由するが、判定・表示は現在姿勢基準に戻した座標で行う。
 """
 
 import math
@@ -25,6 +28,7 @@ from rclpy.qos import (QoSProfile, QoSDurabilityPolicy,
                        QoSHistoryPolicy, QoSReliabilityPolicy)
 
 import sensor_msgs.msg as sensor_msgs
+from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, Float32, Header
 from visualization_msgs.msg import Marker
@@ -112,6 +116,8 @@ class RoadEdgeStop(Node):
         self.declare_parameter('hold_after_stop', True)
         self.declare_parameter('auto_enable', False)        # ベンチ試験用
         self.declare_parameter('verbose', True)
+        # 可視化
+        self.declare_parameter('viz_frame', 'livox_frame')
 
         # ---------- QoS ----------
         qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST,
@@ -120,6 +126,7 @@ class RoadEdgeStop(Node):
 
         # ---------- 状態 ----------
         self.enabled = self.get_parameter('auto_enable').value
+        self.viz_frame = self.get_parameter('viz_frame').value
         self.stop_latched = False
         self.frame_buf = deque()          # 各要素: np.ndarray [4, N] (global xy, z, intensity)
         self.hit_count = 0
@@ -141,7 +148,8 @@ class RoadEdgeStop(Node):
                                                  '/road_edge/cluster_points', qos)
         self.pub_marker = self.create_publisher(Marker, '/road_edge/line_marker', qos)
 
-        self.get_logger().info('road_edge_stop started. enabled=%s' % self.enabled)
+        self.get_logger().info('road_edge_stop started. enabled=%s viz_frame=%s'
+                               % (self.enabled, self.viz_frame))
 
     # ------------------------------------------------------------
     #  コールバック
@@ -168,7 +176,7 @@ class RoadEdgeStop(Node):
         if not self.enabled:
             return
         if not self.odom_ok:
-            self.get_logger().warn('waiting for /odom/wheel_imu', throttle_duration_sec=2.0)
+            self.get_logger().warn('waiting for /odom/wheel_spimu', throttle_duration_sec=2.0)
             return
         if self.stop_latched and self.get_parameter('hold_after_stop').value:
             self.pub_stop.publish(Bool(data=True))
@@ -185,9 +193,8 @@ class RoadEdgeStop(Node):
             self._no_detection(msg)
             return
 
-        # --- local → global（yaw回転 + 並進） ---
-        R = rot2d(self.yaw)
-        xy_g = R @ pts[0:2, :] + np.array([[self.px], [self.py]])
+        # --- local → global（蓄積のためだけに一度グローバルへ） ---
+        xy_g = rot2d(self.yaw) @ pts[0:2, :] + np.array([[self.px], [self.py]])
         pts_g = np.vstack((xy_g, pts[2:4, :]))
 
         # --- 蓄積 ---
@@ -198,9 +205,8 @@ class RoadEdgeStop(Node):
 
         buf = np.hstack(list(self.frame_buf))
 
-        # --- global → local（現在姿勢基準に戻す） ---
-        Rt = rot2d(-self.yaw)
-        xy_l = Rt @ (buf[0:2, :] - np.array([[self.px], [self.py]]))
+        # --- global → local（現在姿勢基準に戻す。以降すべてローカル座標） ---
+        xy_l = rot2d(-self.yaw) @ (buf[0:2, :] - np.array([[self.px], [self.py]]))
         local = np.vstack((xy_l, buf[2:4, :]))   # [4, M]
 
         self.detect(local, msg)
@@ -232,9 +238,9 @@ class RoadEdgeStop(Node):
                         min_samples=int(gp('dbscan_min_samples').value)
                         ).fit_predict(roi[0:2, :].T)
 
-        best = None          # (near_s, v_hat, n_hat, cluster_pts, stats)
+        best = None          # (near_s, v_hat, n_hat, cluster_pts)
+        passed = []          # 形状ゲートを通過したクラスタ [4, n] のリスト
         n_cluster = 0
-        n_pass = 0
 
         for lb in set(labels):
             if lb < 0:
@@ -261,15 +267,18 @@ class RoadEdgeStop(Node):
 
             if not ok:
                 continue
-            n_pass += 1
+            passed.append(cl)
             if best is None or near_s < best[0]:
                 best = (near_s, v_hat, n_hat, cl)
+
+        # --- 通過クラスタを全部 publish（intensity = 通し番号）---
+        self.publish_clusters(passed, msg)
 
         if best is None:
             if gp('verbose').value:
                 self.get_logger().info('frames=%d pts=%d clusters=%d pass=0'
                                        % (len(self.frame_buf), roi.shape[1], n_cluster))
-            self._no_detection(msg)
+            self._no_detection(msg, keep_cluster=True)
             return
 
         near_s, v_hat, n_hat, cl = best
@@ -278,7 +287,7 @@ class RoadEdgeStop(Node):
         # 基準線 L : { p | p·n̂ = near_s }。ロボット前方軸との交点 x
         nx = n_hat[0]
         if abs(nx) < 1e-3:
-            self._no_detection(msg)
+            self._no_detection(msg, keep_cluster=True)
             return
         x_edge_line = near_s / nx                       # L までの前方距離
         x_road_edge = x_edge_line - gp('offset_d').value
@@ -293,7 +302,7 @@ class RoadEdgeStop(Node):
             self.hit_count = 0
 
         stop = self.hit_count >= int(gp('confirm_count').value)
-        if stop:
+        if stop and not self.stop_latched:
             self.stop_latched = True
             self.get_logger().warn('STOP: road edge at %.2f m (L=%.2f, d=%.2f)'
                                    % (x_road_edge, x_edge_line, gp('offset_d').value))
@@ -301,13 +310,11 @@ class RoadEdgeStop(Node):
         if gp('verbose').value:
             self.get_logger().info(
                 'frames=%d pts=%d clusters=%d pass=%d | L=%.2f edge=%.2f rem=%.2f hit=%d'
-                % (len(self.frame_buf), roi.shape[1], n_cluster, n_pass,
+                % (len(self.frame_buf), roi.shape[1], n_cluster, len(passed),
                    x_edge_line, x_road_edge, remaining, self.hit_count))
 
         self.pub_dist.publish(Float32(data=float(remaining)))
         self.pub_stop.publish(Bool(data=bool(stop)))
-        self.pub_cluster.publish(
-            point_cloud_intensity_msg(cl.T, msg.header.stamp, msg.header.frame_id))
         self.publish_marker(near_s, v_hat, n_hat, msg)
 
     # ------------------------------------------------------------
@@ -343,17 +350,27 @@ class RoadEdgeStop(Node):
         return length, width, v_hat, dev, near_s, n_hat
 
     # ------------------------------------------------------------
-    #  補助
+    #  可視化（すべてローカル座標）
     # ------------------------------------------------------------
 
-    def _no_detection(self, msg):
-        self.hit_count = 0
-        self.pub_stop.publish(Bool(data=False))
-        self.pub_dist.publish(Float32(data=float('nan')))
+    def publish_clusters(self, passed, msg):
+        """形状ゲート通過クラスタを全部 publish。intensity をクラスタ通し番号に置換"""
+        if not passed:
+            empty = np.zeros((0, 4), dtype=np.float32)
+            self.pub_cluster.publish(
+                point_cloud_intensity_msg(empty, msg.header.stamp, self.viz_frame))
+            return
+
+        out = []
+        for k, cl in enumerate(passed):
+            idx = np.full(cl.shape[1], float(k), dtype=np.float32)
+            out.append(np.vstack((cl[0:3, :], idx)))
+        pts = np.hstack(out).T                       # [M, 4]
+        self.pub_cluster.publish(
+            point_cloud_intensity_msg(pts, msg.header.stamp, self.viz_frame))
 
     def publish_marker(self, near_s, v_hat, n_hat, msg):
         """L・垂直線・停止目標線・停止許容帯を1つの LINE_LIST で表示"""
-        from geometry_msgs.msg import Point
         gp = self.get_parameter
 
         x_L = near_s / n_hat[0]
@@ -364,26 +381,19 @@ class RoadEdgeStop(Node):
 
         def at(xf, t):
             """ロボット前方距離 xf の位置で、v̂ 方向に t ずれた点"""
-            p = n_hat * (xf * n_hat[0]) + v_hat * t
-            return Point(x=float(p[0]), y=float(p[1]), z=0.0)
+            return n_hat * (xf * n_hat[0]) + v_hat * t
 
-        pts = []
-        # L（縞の手前端）
-        pts += [at(x_L, -half), at(x_L, half)]
-        # 道路端の推定
-        pts += [at(x_edge, -half), at(x_edge, half)]
-        # 停止目標線
-        pts += [at(x_stop, -half), at(x_stop, half)]
-        # 許容帯の手前側
-        pts += [at(x_zone, -half), at(x_zone, half)]
-        # 許容帯の側辺（矩形を閉じる）
-        pts += [at(x_zone, -half), at(x_edge, -half)]
-        pts += [at(x_zone,  half), at(x_edge,  half)]
-        # 中央の垂直線（L → 停止目標）
-        pts += [at(x_L, 0.0), at(x_stop, 0.0)]
+        seg = []
+        seg += [at(x_L, -half), at(x_L, half)]                  # L（縞の手前端）
+        seg += [at(x_edge, -half), at(x_edge, half)]            # 道路端の推定
+        seg += [at(x_stop, -half), at(x_stop, half)]            # 停止目標線
+        seg += [at(x_zone, -half), at(x_zone, half)]            # 許容帯の手前側
+        seg += [at(x_zone, -half), at(x_edge, -half)]           # 許容帯 側辺
+        seg += [at(x_zone,  half), at(x_edge,  half)]
+        seg += [at(x_L, 0.0), at(x_stop, 0.0)]                  # 中央の垂直線
 
         mk = Marker()
-        mk.header.frame_id = msg.header.frame_id
+        mk.header.frame_id = self.viz_frame
         mk.header.stamp = msg.header.stamp
         mk.ns = 'road_edge'
         mk.id = 0
@@ -392,8 +402,31 @@ class RoadEdgeStop(Node):
         mk.scale.x = 0.05
         mk.color.r, mk.color.g, mk.color.b, mk.color.a = 0.1, 0.9, 0.5, 1.0
         mk.pose.orientation.w = 1.0
-        mk.points = pts
+        mk.points = [Point(x=float(p[0]), y=float(p[1]), z=0.0) for p in seg]
         self.pub_marker.publish(mk)
+
+    def clear_marker(self, msg):
+        mk = Marker()
+        mk.header.frame_id = self.viz_frame
+        mk.header.stamp = msg.header.stamp
+        mk.ns = 'road_edge'
+        mk.id = 0
+        mk.action = Marker.DELETE
+        self.pub_marker.publish(mk)
+
+    # ------------------------------------------------------------
+    #  補助
+    # ------------------------------------------------------------
+
+    def _no_detection(self, msg, keep_cluster=False):
+        self.hit_count = 0
+        self.pub_stop.publish(Bool(data=False))
+        self.pub_dist.publish(Float32(data=float('nan')))
+        self.clear_marker(msg)
+        if not keep_cluster:
+            empty = np.zeros((0, 4), dtype=np.float32)
+            self.pub_cluster.publish(
+                point_cloud_intensity_msg(empty, msg.header.stamp, self.viz_frame))
 
 
 def main(args=None):
