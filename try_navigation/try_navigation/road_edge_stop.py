@@ -7,15 +7,13 @@ road_edge_stop.py
   /pcd_segment_ground → odom補正つき短期蓄積(Nフレーム)
     → 強度フィルタ → ROI → grid dedup → DBSCAN
     → 形状ゲート(長さ/幅/向き) → PCA で長軸 v̂
+    → 等間隔性の検証（縞の連続性）
     → 縞の手前端から基準線 L → 停止目標距離を算出
     → N回連続一致で停止フラグ
 
 状態:
   /road_edge_stop/enable (Bool) が True の間だけ蓄積・判定を行う。
   停止フラグが立ったら enable が False に戻るまで判定を無効化する。
-
-可視化は viz_frame（既定 livox_frame）のローカル座標で publish する。
-蓄積時のみ odom を経由するが、判定・表示は現在姿勢基準に戻した座標で行う。
 """
 
 import math
@@ -91,33 +89,36 @@ class RoadEdgeStop(Node):
 
         # ---------- パラメータ ----------
         # 蓄積
-        self.declare_parameter('accumulate_frames', 5)      # 蓄積フレーム数
-        self.declare_parameter('grid_size', 0.05)           # 重複除去グリッド [m]
+        self.declare_parameter('accumulate_frames', 5)
+        self.declare_parameter('grid_size', 0.05)
         # 強度・ROI
         self.declare_parameter('intensity_threshold', 30.0)
-        self.declare_parameter('roi_x_min', 1.0)            # [m] 足元の反射物を除外
-        self.declare_parameter('roi_x_max', 8.0)
+        self.declare_parameter('roi_x_min', 1.0)
+        self.declare_parameter('roi_x_max', 5.0)
         self.declare_parameter('roi_y_abs', 3.0)
         # DBSCAN
         self.declare_parameter('dbscan_eps', 0.25)
         self.declare_parameter('dbscan_min_samples', 8)
         # 形状ゲート
-        self.declare_parameter('min_long_length', 1.5)      # 長軸長さ下限 [m]
-        self.declare_parameter('min_short_width', 0.20)     # 短軸幅 下限 [m]
-        self.declare_parameter('max_short_width', 0.80)     # 短軸幅 上限 [m]
-        self.declare_parameter('max_angle_dev_deg', 30.0)   # 進行方向との直交からのズレ許容 [deg]
+        self.declare_parameter('min_long_length', 1.5)
+        self.declare_parameter('min_short_width', 0.20)
+        self.declare_parameter('max_short_width', 0.80)
+        self.declare_parameter('max_angle_dev_deg', 30.0)
+        # 連続性（等間隔性）ゲート
+        self.declare_parameter('min_stripe_count', 2)     # 必要な縞の本数
+        self.declare_parameter('pitch_min', 0.50)         # 縞間隔の下限 [m]
+        self.declare_parameter('pitch_max', 1.50)         # 縞間隔の上限 [m]
+        self.declare_parameter('pitch_tolerance', 0.15)   # 間隔のばらつき許容 [m]
         # 停止幾何
-        self.declare_parameter('offset_d', 0.30)            # 縞手前端→道路端 [m] 地点ごとに実測
-        self.declare_parameter('safety_margin', 0.50)       # 道路端からの余裕 [m]
-        self.declare_parameter('robot_front_x', 0.45)       # base原点→前端 [m]
+        self.declare_parameter('offset_d', 0.30)
+        self.declare_parameter('safety_margin', 0.50)
+        self.declare_parameter('robot_front_x', 0.45)
         self.declare_parameter('near_edge_percentile', 5.0)
         # 判定
-        self.declare_parameter('confirm_count', 3)          # N回連続一致で確定
+        self.declare_parameter('confirm_count', 3)
         self.declare_parameter('hold_after_stop', True)
-        self.declare_parameter('auto_enable', False)        # ベンチ試験用
+        self.declare_parameter('auto_enable', False)
         self.declare_parameter('verbose', True)
-        # 可視化
-        self.declare_parameter('viz_frame', 'livox_frame')
 
         # ---------- QoS ----------
         qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST,
@@ -126,9 +127,8 @@ class RoadEdgeStop(Node):
 
         # ---------- 状態 ----------
         self.enabled = self.get_parameter('auto_enable').value
-        self.viz_frame = self.get_parameter('viz_frame').value
         self.stop_latched = False
-        self.frame_buf = deque()          # 各要素: np.ndarray [4, N] (global xy, z, intensity)
+        self.frame_buf = deque()
         self.hit_count = 0
 
         self.odom_ok = False
@@ -138,7 +138,7 @@ class RoadEdgeStop(Node):
         # ---------- Sub ----------
         self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground',
                                  self.cb_ground, qos)
-        self.create_subscription(Odometry, '/odom/wheel_spimu', self.cb_odom, qos)
+        self.create_subscription(Odometry, '/odom/wheel_imu', self.cb_odom, qos)
         self.create_subscription(Bool, '/road_edge_stop/enable', self.cb_enable, qos)
 
         # ---------- Pub ----------
@@ -148,8 +148,7 @@ class RoadEdgeStop(Node):
                                                  '/road_edge/cluster_points', qos)
         self.pub_marker = self.create_publisher(Marker, '/road_edge/line_marker', qos)
 
-        self.get_logger().info('road_edge_stop started. enabled=%s viz_frame=%s'
-                               % (self.enabled, self.viz_frame))
+        self.get_logger().info('road_edge_stop started. enabled=%s' % self.enabled)
 
     # ------------------------------------------------------------
     #  コールバック
@@ -162,11 +161,8 @@ class RoadEdgeStop(Node):
         self.odom_ok = True
 
     def cb_enable(self, msg):
-        if msg.data and not self.enabled:
-            self.get_logger().info('enabled: buffer cleared, detection ON')
-        if (not msg.data) and self.enabled:
-            self.get_logger().info('disabled: detection OFF')
         if msg.data != self.enabled:
+            self.get_logger().info('detection %s' % ('ON' if msg.data else 'OFF'))
             self.frame_buf.clear()
             self.hit_count = 0
             self.stop_latched = False
@@ -176,28 +172,28 @@ class RoadEdgeStop(Node):
         if not self.enabled:
             return
         if not self.odom_ok:
-            self.get_logger().warn('waiting for /odom/wheel_spimu', throttle_duration_sec=2.0)
+            self.get_logger().warn('waiting for odom', throttle_duration_sec=2.0)
             return
         if self.stop_latched and self.get_parameter('hold_after_stop').value:
             self.pub_stop.publish(Bool(data=True))
             return
 
-        pts = pointcloud2_to_array(msg)          # [4, N] local
+        pts = pointcloud2_to_array(msg)
         if pts.shape[1] == 0:
             return
 
-        # --- 強度フィルタ（蓄積前に落として軽量化） ---
         th = self.get_parameter('intensity_threshold').value
         pts = pts[:, pts[3, :] >= th]
         if pts.shape[1] == 0:
-            self._no_detection(msg)
+            self._no_detection()
             return
 
-        # --- local → global（蓄積のためだけに一度グローバルへ） ---
-        xy_g = rot2d(self.yaw) @ pts[0:2, :] + np.array([[self.px], [self.py]])
+        # local → global
+        R = rot2d(self.yaw)
+        xy_g = R @ pts[0:2, :] + np.array([[self.px], [self.py]])
         pts_g = np.vstack((xy_g, pts[2:4, :]))
 
-        # --- 蓄積 ---
+        # 蓄積
         n_frames = int(self.get_parameter('accumulate_frames').value)
         self.frame_buf.append(pts_g)
         while len(self.frame_buf) > n_frames:
@@ -205,9 +201,10 @@ class RoadEdgeStop(Node):
 
         buf = np.hstack(list(self.frame_buf))
 
-        # --- global → local（現在姿勢基準に戻す。以降すべてローカル座標） ---
-        xy_l = rot2d(-self.yaw) @ (buf[0:2, :] - np.array([[self.px], [self.py]]))
-        local = np.vstack((xy_l, buf[2:4, :]))   # [4, M]
+        # global → local（現在姿勢基準）
+        Rt = rot2d(-self.yaw)
+        xy_l = Rt @ (buf[0:2, :] - np.array([[self.px], [self.py]]))
+        local = np.vstack((xy_l, buf[2:4, :]))
 
         self.detect(local, msg)
 
@@ -224,7 +221,7 @@ class RoadEdgeStop(Node):
             & (np.abs(y) <= gp('roi_y_abs').value)
         roi = local[:, m]
         if roi.shape[1] < gp('dbscan_min_samples').value:
-            self._no_detection(msg)
+            self._no_detection()
             return
 
         # --- grid dedup ---
@@ -238,8 +235,7 @@ class RoadEdgeStop(Node):
                         min_samples=int(gp('dbscan_min_samples').value)
                         ).fit_predict(roi[0:2, :].T)
 
-        best = None          # (near_s, v_hat, n_hat, cluster_pts)
-        passed = []          # 形状ゲートを通過したクラスタ [4, n] のリスト
+        cands = []
         n_cluster = 0
 
         for lb in set(labels):
@@ -250,50 +246,46 @@ class RoadEdgeStop(Node):
             if cl.shape[1] < 3:
                 continue
 
-            stats = self.cluster_shape(cl)
-            if stats is None:
+            st = self.cluster_shape(cl)
+            if st is None:
                 continue
-            length, width, v_hat, ang_perp_dev, near_s, n_hat = stats
+            length, width, v_hat, dev, near_s, n_hat = st
 
             ok = (length >= gp('min_long_length').value
                   and gp('min_short_width').value <= width <= gp('max_short_width').value
-                  and ang_perp_dev <= gp('max_angle_dev_deg').value)
+                  and dev <= gp('max_angle_dev_deg').value)
 
             if gp('verbose').value:
                 self.get_logger().info(
                     '  cl%-2d n=%-4d len=%.2f w=%.2f dev=%.1f near=%.2f %s'
-                    % (lb, cl.shape[1], length, width, ang_perp_dev, near_s,
+                    % (lb, cl.shape[1], length, width, dev, near_s,
                        'PASS' if ok else 'reject'))
+            if ok:
+                cands.append(dict(pts=cl, v=v_hat, n=n_hat, near=near_s,
+                                  cnt=cl.shape[1]))
 
-            if not ok:
-                continue
-            passed.append(cl)
-            if best is None or near_s < best[0]:
-                best = (near_s, v_hat, n_hat, cl)
+        # --- 連続性（等間隔性）の検証 ---
+        chain = self.check_periodicity(cands)
 
-        # --- 通過クラスタを全部 publish（intensity = 通し番号）---
-        self.publish_clusters(passed, msg)
-
-        if best is None:
+        if not chain:
             if gp('verbose').value:
-                self.get_logger().info('frames=%d pts=%d clusters=%d pass=0'
-                                       % (len(self.frame_buf), roi.shape[1], n_cluster))
-            self._no_detection(msg, keep_cluster=True)
+                self.get_logger().info('frames=%d pts=%d clusters=%d pass=%d chain=0'
+                                       % (len(self.frame_buf), roi.shape[1],
+                                          n_cluster, len(cands)))
+            self._no_detection()
             return
 
-        near_s, v_hat, n_hat, cl = best
+        head = chain[0]                       # 最も手前の縞
+        near_s, v_hat, n_hat = head['near'], head['v'], head['n']
 
         # --- 停止目標距離 ---
-        # 基準線 L : { p | p·n̂ = near_s }。ロボット前方軸との交点 x
         nx = n_hat[0]
         if abs(nx) < 1e-3:
-            self._no_detection(msg, keep_cluster=True)
+            self._no_detection()
             return
-        x_edge_line = near_s / nx                       # L までの前方距離
-        x_road_edge = x_edge_line - gp('offset_d').value
-        remaining = (x_road_edge
-                     - gp('safety_margin').value
-                     - gp('robot_front_x').value)
+        x_L = near_s / nx
+        x_edge = x_L - gp('offset_d').value
+        remaining = x_edge - gp('safety_margin').value - gp('robot_front_x').value
 
         # --- 確定判定 ---
         if remaining <= 0.0:
@@ -304,32 +296,84 @@ class RoadEdgeStop(Node):
         stop = self.hit_count >= int(gp('confirm_count').value)
         if stop and not self.stop_latched:
             self.stop_latched = True
-            self.get_logger().warn('STOP: road edge at %.2f m (L=%.2f, d=%.2f)'
-                                   % (x_road_edge, x_edge_line, gp('offset_d').value))
+            self.get_logger().warn('STOP: road edge at %.2f m (L=%.2f)' % (x_edge, x_L))
 
         if gp('verbose').value:
+            gaps = [chain[i + 1]['s'] - chain[i]['s'] for i in range(len(chain) - 1)]
+            gs = ' '.join('%.2f' % v for v in gaps) if gaps else '-'
             self.get_logger().info(
-                'frames=%d pts=%d clusters=%d pass=%d | L=%.2f edge=%.2f rem=%.2f hit=%d'
-                % (len(self.frame_buf), roi.shape[1], n_cluster, len(passed),
-                   x_edge_line, x_road_edge, remaining, self.hit_count))
+                'frames=%d pts=%d clusters=%d pass=%d chain=%d gaps=[%s] | L=%.2f edge=%.2f rem=%.2f hit=%d'
+                % (len(self.frame_buf), roi.shape[1], n_cluster, len(cands),
+                   len(chain), gs, x_L, x_edge, remaining, self.hit_count))
 
         self.pub_dist.publish(Float32(data=float(remaining)))
         self.pub_stop.publish(Bool(data=bool(stop)))
-        self.publish_marker(near_s, v_hat, n_hat, msg)
+
+        # --- 採用した縞群を単色で publish ---
+        allpts = np.hstack([c['pts'] for c in chain]).copy()
+        allpts[3, :] = 100.0
+        self.pub_cluster.publish(
+            point_cloud_intensity_msg(allpts.T, msg.header.stamp, msg.header.frame_id))
+
+        self.publish_marker(x_L, v_hat, n_hat, msg)
+
+    # ------------------------------------------------------------
+    #  連続性の検証
+    # ------------------------------------------------------------
+
+    def check_periodicity(self, cands):
+        """等間隔に並ぶ縞の連なりを探し、手前から順に並べて返す"""
+        gp = self.get_parameter
+        need = int(gp('min_stripe_count').value)
+        if len(cands) == 0:
+            return []
+
+        # 点数が最も多いクラスタの法線を共通基準にし、重心を投影して並べる
+        ref = max(cands, key=lambda c: c['cnt'])['n']
+        for c in cands:
+            c['s'] = float(ref @ c['pts'][0:2, :].mean(axis=1))
+        cands = sorted(cands, key=lambda c: c['s'])
+
+        if need <= 1:
+            return [cands[0]]
+        if len(cands) < need:
+            return []
+
+        pmin = gp('pitch_min').value
+        pmax = gp('pitch_max').value
+        tol = gp('pitch_tolerance').value
+
+        best = []
+        for i in range(len(cands)):
+            chain = [cands[i]]
+            gaps = []
+            for j in range(i + 1, len(cands)):
+                gap = cands[j]['s'] - chain[-1]['s']
+                if gap < pmin:
+                    continue
+                if gap > pmax:
+                    break
+                if gaps and abs(gap - float(np.mean(gaps))) > tol:
+                    break
+                chain.append(cands[j])
+                gaps.append(gap)
+            if len(chain) > len(best):
+                best = chain
+
+        return best if len(best) >= need else []
 
     # ------------------------------------------------------------
     #  クラスタ形状（PCA）
     # ------------------------------------------------------------
 
     def cluster_shape(self, cl):
-        """戻り値: (長軸長さ, 短軸幅, v̂, 直交からのズレ[deg], 手前端 s, n̂)"""
         xy = cl[0:2, :]
         mean = xy.mean(axis=1, keepdims=True)
         c = xy - mean
         cov = (c @ c.T) / max(c.shape[1] - 1, 1)
-        w, V = np.linalg.eigh(cov)          # 昇順
-        v_hat = V[:, 1]                     # 第1主成分 = 長軸
-        u_hat = V[:, 0]                     # 短軸
+        w, V = np.linalg.eigh(cov)
+        v_hat = V[:, 1]
+        u_hat = V[:, 0]
 
         pl = v_hat @ c
         ps = u_hat @ c
@@ -338,11 +382,9 @@ class RoadEdgeStop(Node):
         if length < 1e-6:
             return None
 
-        # 進行方向(x軸)と長軸のなす角。90°に近いほど良い
         ang = math.degrees(math.acos(min(1.0, abs(float(v_hat[0])))))
         dev = abs(90.0 - ang)
 
-        # 手前端: 前方を向く法線 n̂ への射影の下側パーセンタイル
         n_hat = u_hat if u_hat[0] > 0 else -u_hat
         s = n_hat @ xy
         near_s = float(np.percentile(s, self.get_parameter('near_edge_percentile').value))
@@ -350,50 +392,37 @@ class RoadEdgeStop(Node):
         return length, width, v_hat, dev, near_s, n_hat
 
     # ------------------------------------------------------------
-    #  可視化（すべてローカル座標）
+    #  補助
     # ------------------------------------------------------------
 
-    def publish_clusters(self, passed, msg):
-        """形状ゲート通過クラスタを全部 publish。intensity をクラスタ通し番号に置換"""
-        if not passed:
-            empty = np.zeros((0, 4), dtype=np.float32)
-            self.pub_cluster.publish(
-                point_cloud_intensity_msg(empty, msg.header.stamp, self.viz_frame))
-            return
+    def _no_detection(self):
+        self.hit_count = 0
+        self.pub_stop.publish(Bool(data=False))
+        self.pub_dist.publish(Float32(data=float('nan')))
 
-        out = []
-        for k, cl in enumerate(passed):
-            idx = np.full(cl.shape[1], float(k), dtype=np.float32)
-            out.append(np.vstack((cl[0:3, :], idx)))
-        pts = np.hstack(out).T                       # [M, 4]
-        self.pub_cluster.publish(
-            point_cloud_intensity_msg(pts, msg.header.stamp, self.viz_frame))
-
-    def publish_marker(self, near_s, v_hat, n_hat, msg):
-        """L・垂直線・停止目標線・停止許容帯を1つの LINE_LIST で表示"""
+    def publish_marker(self, x_L, v_hat, n_hat, msg):
+        """L・道路端・停止目標・許容帯を1つの LINE_LIST で表示"""
         gp = self.get_parameter
-
-        x_L = near_s / n_hat[0]
         x_edge = x_L - gp('offset_d').value
         x_stop = x_edge - gp('safety_margin').value
-        x_zone = x_edge - 1.5                      # 規約の許容帯 手前1.5m
-        half = 2.0                                 # 線分の半長 [m]
+        x_zone = x_edge - 1.5
+        half = 2.0
 
         def at(xf, t):
-            """ロボット前方距離 xf の位置で、v̂ 方向に t ずれた点"""
-            return n_hat * (xf * n_hat[0]) + v_hat * t
+            p = n_hat * (xf * n_hat[0]) + v_hat * t
+            return Point(x=float(p[0]), y=float(p[1]), z=0.0)
 
-        seg = []
-        seg += [at(x_L, -half), at(x_L, half)]                  # L（縞の手前端）
-        seg += [at(x_edge, -half), at(x_edge, half)]            # 道路端の推定
-        seg += [at(x_stop, -half), at(x_stop, half)]            # 停止目標線
-        seg += [at(x_zone, -half), at(x_zone, half)]            # 許容帯の手前側
-        seg += [at(x_zone, -half), at(x_edge, -half)]           # 許容帯 側辺
-        seg += [at(x_zone,  half), at(x_edge,  half)]
-        seg += [at(x_L, 0.0), at(x_stop, 0.0)]                  # 中央の垂直線
+        pts = []
+        pts += [at(x_L, -half), at(x_L, half)]
+        pts += [at(x_edge, -half), at(x_edge, half)]
+        pts += [at(x_stop, -half), at(x_stop, half)]
+        pts += [at(x_zone, -half), at(x_zone, half)]
+        pts += [at(x_zone, -half), at(x_edge, -half)]
+        pts += [at(x_zone,  half), at(x_edge,  half)]
+        pts += [at(x_L, 0.0), at(x_stop, 0.0)]
 
         mk = Marker()
-        mk.header.frame_id = self.viz_frame
+        mk.header.frame_id = msg.header.frame_id
         mk.header.stamp = msg.header.stamp
         mk.ns = 'road_edge'
         mk.id = 0
@@ -402,31 +431,8 @@ class RoadEdgeStop(Node):
         mk.scale.x = 0.05
         mk.color.r, mk.color.g, mk.color.b, mk.color.a = 0.1, 0.9, 0.5, 1.0
         mk.pose.orientation.w = 1.0
-        mk.points = [Point(x=float(p[0]), y=float(p[1]), z=0.0) for p in seg]
+        mk.points = pts
         self.pub_marker.publish(mk)
-
-    def clear_marker(self, msg):
-        mk = Marker()
-        mk.header.frame_id = self.viz_frame
-        mk.header.stamp = msg.header.stamp
-        mk.ns = 'road_edge'
-        mk.id = 0
-        mk.action = Marker.DELETE
-        self.pub_marker.publish(mk)
-
-    # ------------------------------------------------------------
-    #  補助
-    # ------------------------------------------------------------
-
-    def _no_detection(self, msg, keep_cluster=False):
-        self.hit_count = 0
-        self.pub_stop.publish(Bool(data=False))
-        self.pub_dist.publish(Float32(data=float('nan')))
-        self.clear_marker(msg)
-        if not keep_cluster:
-            empty = np.zeros((0, 4), dtype=np.float32)
-            self.pub_cluster.publish(
-                point_cloud_intensity_msg(empty, msg.header.stamp, self.viz_frame))
 
 
 def main(args=None):
