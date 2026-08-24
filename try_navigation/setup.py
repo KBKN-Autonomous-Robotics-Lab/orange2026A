@@ -60,8 +60,8 @@ setup(
             'ekf_myself_odom = try_navigation.ekf_myself_odom:main',
             'map_check = try_navigation.map_check:main',
             'marker_utils = try_navigation.marker_utils:main',
-            'pcd_buffer = try_navigation.pcd_buffer:main'
-
+            'pcd_buffer = try_navigation.pcd_buffer:main',
+            'intensity_inspector = try_navigation.intensity_inspector:main'
         ],
     },
 )
