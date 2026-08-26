@@ -5,15 +5,16 @@ road_edge_stop.py
 
 パイプライン:
   /pcd_segment_ground → odom補正つき短期蓄積(Nフレーム)
-    → 強度フィルタ → ROI → grid dedup → DBSCAN
-    → 形状ゲート(長さ/幅/向き) → PCA で長軸 v̂
-    → 等間隔性の検証（縞の連続性）
+    → 強度フィルタ → 円形ROI → grid dedup → DBSCAN
+    → 形状ゲート(長さ/幅) → PCA で長軸 v̂
+    → 連続性の検証（等間隔性 ＋ 縞どうしの平行性）
     → 縞の手前端から基準線 L → 停止目標距離を算出
     → N回連続一致で停止フラグ
 
-状態:
-  /road_edge_stop/enable (Bool) が True の間だけ蓄積・判定を行う。
-  停止フラグが立ったら enable が False に戻るまで判定を無効化する。
+方位について:
+  絶対的な向き（進行方向との角度）は問わない。
+  代わりに「縞どうしが互いに平行であること」を条件にするため、
+  横断歩道を真横から見ても検出できる。
 """
 
 import math
@@ -78,6 +79,12 @@ def rot2d(theta):
     return np.array([[c, -s], [s, c]])
 
 
+def angle_between_axes(a, b):
+    """2つの軸方向のなす角[deg]。符号の違いは無視して 0〜90 に畳む"""
+    d = abs(float(np.dot(a, b)))
+    return math.degrees(math.acos(min(1.0, d)))
+
+
 # ============================================================
 #  メインノード
 # ============================================================
@@ -89,35 +96,36 @@ class RoadEdgeStop(Node):
 
         # ---------- パラメータ ----------
         # 蓄積
-        self.declare_parameter('accumulate_frames', 5)
+        self.declare_parameter('accumulate_frames', 10)
         self.declare_parameter('grid_size', 0.05)
-        # 強度・ROI
+        # 強度・ROI（円形）
         self.declare_parameter('intensity_threshold', 30.0)
-        self.declare_parameter('roi_x_min', 1.0)
-        self.declare_parameter('roi_x_max', 5.0)
-        self.declare_parameter('roi_y_abs', 3.0)
+        self.declare_parameter('roi_r_min', 0.5)          # 足元を除外 [m]
+        self.declare_parameter('roi_r_max', 5.0)          # 強度が持つ範囲 [m]
         # DBSCAN
         self.declare_parameter('dbscan_eps', 0.25)
         self.declare_parameter('dbscan_min_samples', 8)
-        # 形状ゲート
+        # 形状ゲート（向きは問わない）
         self.declare_parameter('min_long_length', 1.5)
         self.declare_parameter('min_short_width', 0.20)
         self.declare_parameter('max_short_width', 0.80)
-        self.declare_parameter('max_angle_dev_deg', 30.0)
-        # 連続性（等間隔性）ゲート
+        # 連続性ゲート
         self.declare_parameter('min_stripe_count', 2)     # 必要な縞の本数
         self.declare_parameter('pitch_min', 0.50)         # 縞間隔の下限 [m]
         self.declare_parameter('pitch_max', 1.50)         # 縞間隔の上限 [m]
         self.declare_parameter('pitch_tolerance', 0.15)   # 間隔のばらつき許容 [m]
+        self.declare_parameter('max_parallel_dev_deg', 15.0)  # 縞どうしの平行性 [deg]
         # 停止幾何
         self.declare_parameter('offset_d', 0.30)
         self.declare_parameter('safety_margin', 0.50)
         self.declare_parameter('robot_front_x', 0.45)
         self.declare_parameter('near_edge_percentile', 5.0)
+        self.declare_parameter('min_normal_x', 0.20)      # 前方成分の下限（距離換算の暴走防止）
         # 判定
         self.declare_parameter('confirm_count', 3)
-        self.declare_parameter('hold_after_stop', True)
-        self.declare_parameter('auto_enable', False)
+        self.declare_parameter('hold_after_stop', False)
+        self.declare_parameter('auto_enable', True)
+        self.declare_parameter('odom_topic', '/odom/wheel_spimu')
         self.declare_parameter('verbose', True)
 
         # ---------- QoS ----------
@@ -138,7 +146,8 @@ class RoadEdgeStop(Node):
         # ---------- Sub ----------
         self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_ground',
                                  self.cb_ground, qos)
-        self.create_subscription(Odometry, '/odom/wheel_imu', self.cb_odom, qos)
+        self.create_subscription(Odometry, self.get_parameter('odom_topic').value,
+                                 self.cb_odom, qos)
         self.create_subscription(Bool, '/road_edge_stop/enable', self.cb_enable, qos)
 
         # ---------- Pub ----------
@@ -215,10 +224,9 @@ class RoadEdgeStop(Node):
     def detect(self, local, msg):
         gp = self.get_parameter
 
-        # --- ROI ---
-        x, y = local[0, :], local[1, :]
-        m = (x >= gp('roi_x_min').value) & (x <= gp('roi_x_max').value) \
-            & (np.abs(y) <= gp('roi_y_abs').value)
+        # --- 円形 ROI ---
+        r = np.hypot(local[0, :], local[1, :])
+        m = (r >= gp('roi_r_min').value) & (r <= gp('roi_r_max').value)
         roi = local[:, m]
         if roi.shape[1] < gp('dbscan_min_samples').value:
             self._no_detection()
@@ -251,9 +259,9 @@ class RoadEdgeStop(Node):
                 continue
             length, width, v_hat, dev, near_s, n_hat = st
 
+            # 向きは問わず、寸法のみで足切り
             ok = (length >= gp('min_long_length').value
-                  and gp('min_short_width').value <= width <= gp('max_short_width').value
-                  and dev <= gp('max_angle_dev_deg').value)
+                  and gp('min_short_width').value <= width <= gp('max_short_width').value)
 
             if gp('verbose').value:
                 self.get_logger().info(
@@ -262,9 +270,10 @@ class RoadEdgeStop(Node):
                        'PASS' if ok else 'reject'))
             if ok:
                 cands.append(dict(pts=cl, v=v_hat, n=n_hat, near=near_s,
-                                  cnt=cl.shape[1]))
+                                  cnt=cl.shape[1],
+                                  ctr=cl[0:2, :].mean(axis=1)))
 
-        # --- 連続性（等間隔性）の検証 ---
+        # --- 連続性（平行性 ＋ 等間隔性）の検証 ---
         chain = self.check_periodicity(cands)
 
         if not chain:
@@ -280,12 +289,18 @@ class RoadEdgeStop(Node):
 
         # --- 停止目標距離 ---
         nx = n_hat[0]
-        if abs(nx) < 1e-3:
+        if abs(nx) < gp('min_normal_x').value:
+            # 縞が真横を向いている等、前方距離に換算できない配置
+            if gp('verbose').value:
+                self.get_logger().info('skip: normal_x=%.2f too small' % nx)
             self._no_detection()
-            return
+            return  # 検出はできているが前方距離に換算できない配置
+        # 引き算は法線方向（縞に垂直）で行い、最後に前方距離へ換算する
+        s_edge = near_s - gp('offset_d').value
+        s_stop = s_edge - gp('safety_margin').value
         x_L = near_s / nx
-        x_edge = x_L - gp('offset_d').value
-        remaining = x_edge - gp('safety_margin').value - gp('robot_front_x').value
+        x_edge = s_edge / nx
+        remaining = s_stop / nx - gp('robot_front_x').value
 
         # --- 確定判定 ---
         if remaining <= 0.0:
@@ -315,28 +330,39 @@ class RoadEdgeStop(Node):
         self.pub_cluster.publish(
             point_cloud_intensity_msg(allpts.T, msg.header.stamp, msg.header.frame_id))
 
-        self.publish_marker(x_L, v_hat, n_hat, msg)
+        t_c = float(v_hat @ head['ctr'])
+        self.publish_marker(near_s, v_hat, n_hat, t_c, msg)
 
     # ------------------------------------------------------------
-    #  連続性の検証
+    #  連続性の検証（平行性 ＋ 等間隔性）
     # ------------------------------------------------------------
 
     def check_periodicity(self, cands):
-        """等間隔に並ぶ縞の連なりを探し、手前から順に並べて返す"""
+        """互いに平行で等間隔に並ぶ縞の連なりを探し、手前から順に返す"""
         gp = self.get_parameter
         need = int(gp('min_stripe_count').value)
         if len(cands) == 0:
             return []
 
-        # 点数が最も多いクラスタの法線を共通基準にし、重心を投影して並べる
-        ref = max(cands, key=lambda c: c['cnt'])['n']
-        for c in cands:
-            c['s'] = float(ref @ c['pts'][0:2, :].mean(axis=1))
-        cands = sorted(cands, key=lambda c: c['s'])
+        # 点数が最も多いクラスタを基準にする
+        base = max(cands, key=lambda c: c['cnt'])
+        ref_v = base['v']
+        ref_n = base['n']
+
+        # 基準と平行なものだけ残す
+        pdev = gp('max_parallel_dev_deg').value
+        para = [c for c in cands if angle_between_axes(c['v'], ref_v) <= pdev]
+        if len(para) == 0:
+            return []
+
+        # 共通の法線で重心を投影して並べる
+        for c in para:
+            c['s'] = float(ref_n @ c['pts'][0:2, :].mean(axis=1))
+        para = sorted(para, key=lambda c: c['s'])
 
         if need <= 1:
-            return [cands[0]]
-        if len(cands) < need:
+            return [para[0]]
+        if len(para) < need:
             return []
 
         pmin = gp('pitch_min').value
@@ -344,18 +370,18 @@ class RoadEdgeStop(Node):
         tol = gp('pitch_tolerance').value
 
         best = []
-        for i in range(len(cands)):
-            chain = [cands[i]]
+        for i in range(len(para)):
+            chain = [para[i]]
             gaps = []
-            for j in range(i + 1, len(cands)):
-                gap = cands[j]['s'] - chain[-1]['s']
+            for j in range(i + 1, len(para)):
+                gap = para[j]['s'] - chain[-1]['s']
                 if gap < pmin:
                     continue
                 if gap > pmax:
                     break
                 if gaps and abs(gap - float(np.mean(gaps))) > tol:
                     break
-                chain.append(cands[j])
+                chain.append(para[j])
                 gaps.append(gap)
             if len(chain) > len(best):
                 best = chain
@@ -383,7 +409,7 @@ class RoadEdgeStop(Node):
             return None
 
         ang = math.degrees(math.acos(min(1.0, abs(float(v_hat[0])))))
-        dev = abs(90.0 - ang)
+        dev = abs(90.0 - ang)          # ログ表示用（判定には使わない）
 
         n_hat = u_hat if u_hat[0] > 0 else -u_hat
         s = n_hat @ xy
@@ -399,27 +425,42 @@ class RoadEdgeStop(Node):
         self.hit_count = 0
         self.pub_stop.publish(Bool(data=False))
         self.pub_dist.publish(Float32(data=float('nan')))
+        self.clear_marker()
+        self.clear_cluster()
 
-    def publish_marker(self, x_L, v_hat, n_hat, msg):
-        """L・道路端・停止目標・許容帯を1つの LINE_LIST で表示"""
+    def clear_cluster(self):
+        empty = np.zeros((0, 4), dtype=np.float32)
+        msg = point_cloud_intensity_msg(empty, self.get_clock().now().to_msg(), 'odom')
+        self.pub_cluster.publish(msg)
+
+    def clear_marker(self):
+        mk = Marker()
+        mk.ns = 'road_edge'
+        mk.id = 0
+        mk.action = Marker.DELETE
+        self.pub_marker.publish(mk)
+
+    def publish_marker(self, near_s, v_hat, n_hat, t_c, msg):
+        """L・道路端・停止目標・許容帯を1つの LINE_LIST で表示
+        すべて法線方向の距離で扱うため、姿勢によらず間隔は一定"""
         gp = self.get_parameter
-        x_edge = x_L - gp('offset_d').value
-        x_stop = x_edge - gp('safety_margin').value
-        x_zone = x_edge - 1.5
+        s_edge = near_s - gp('offset_d').value
+        s_stop = s_edge - gp('safety_margin').value
+        s_zone = s_edge - 1.5
         half = 2.0
 
-        def at(xf, t):
-            p = n_hat * (xf * n_hat[0]) + v_hat * t
+        def at(s_val, t):
+            p = n_hat * s_val + v_hat * (t_c + t)
             return Point(x=float(p[0]), y=float(p[1]), z=0.0)
 
         pts = []
-        pts += [at(x_L, -half), at(x_L, half)]
-        pts += [at(x_edge, -half), at(x_edge, half)]
-        pts += [at(x_stop, -half), at(x_stop, half)]
-        pts += [at(x_zone, -half), at(x_zone, half)]
-        pts += [at(x_zone, -half), at(x_edge, -half)]
-        pts += [at(x_zone,  half), at(x_edge,  half)]
-        pts += [at(x_L, 0.0), at(x_stop, 0.0)]
+        pts += [at(near_s, -half), at(near_s, half)]
+        pts += [at(s_edge, -half), at(s_edge, half)]
+        pts += [at(s_stop, -half), at(s_stop, half)]
+        pts += [at(s_zone, -half), at(s_zone, half)]
+        pts += [at(s_zone, -half), at(s_edge, -half)]
+        pts += [at(s_zone,  half), at(s_edge,  half)]
+        pts += [at(near_s, 0.0), at(s_stop, 0.0)]
 
         mk = Marker()
         mk.header.frame_id = msg.header.frame_id

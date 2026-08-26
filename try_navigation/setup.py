@@ -61,8 +61,8 @@ setup(
             'map_check = try_navigation.map_check:main',
             'marker_utils = try_navigation.marker_utils:main',
             'pcd_buffer = try_navigation.pcd_buffer:main',
-            'road_edge_stop = try_navigation.road_edge_stop:main'
-
+            'road_edge_stop = try_navigation.road_edge_stop:main',
+            'intensity_inspector = try_navigation.intensity_inspector:main'
         ],
     },
 )
