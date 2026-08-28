@@ -81,6 +81,8 @@ class PathFollower(Node):
         self.waypoint_number_sub = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.roadside_sub = self.create_subscription(RoadsideInfo, "/roadside_info", self.roadside_callback, 10)
         self.stop_line_sub = self.create_subscription(std_msgs.Bool, "/stop_line", self.stopline_callback, 10)
+        self.roadside_follow_detected_sub = self.create_subscription(std_msgs.Bool, '/roadside/detected', self.roadside_follow_detected_callback, qos_profile)
+        self.roadside_follow_angle_sub = self.create_subscription(std_msgs.Float32, '/roadside/target_angle', self.roadside_follow_angle_callback, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -181,6 +183,11 @@ class PathFollower(Node):
         self.safe_dist = 0.20
         self.recover_dist = 0.55
 
+        # roadside follow (reflection intensity)
+        self.roadside_follow_detected = False
+        self.roadside_follow_rad = 0.0
+        self.roadside_follow_time = None
+
         # stop line
         self.stop_line = None
 
@@ -249,6 +256,13 @@ class PathFollower(Node):
         self.roadside_detected = msg.detected
         self.boundary_distance = msg.boundary_distance
         self.boundary_angle = msg.boundary_angle
+
+    def roadside_follow_detected_callback(self, msg):
+        self.roadside_follow_detected = msg.data
+        self.roadside_follow_time = self.get_clock().now()
+
+    def roadside_follow_angle_callback(self, msg):
+        self.roadside_follow_rad = msg.data
     
     def stopline_callback(self, msg):
         self.stop_line = msg.data
@@ -423,10 +437,30 @@ class PathFollower(Node):
                 self.none_jam_timer = now
             self.jam_active = False
 
-        #---------------------------        
+        #---------------------------       
+
+         # 路側帯データが有効か（検出中かつ 0.5秒以内）
+        roadside_follow_ok = False
+        if self.roadside_follow_detected and self.roadside_follow_time is not None:
+            age = (self.get_clock().now() - self.roadside_follow_time).nanoseconds / 1e9
+            if age < 0.5:
+                roadside_follow_ok = True
         
         if ~np.any(ch_obs) :
-            if np.any(lh_obs) and np.any(rh_obs) :  #真ん中　
+            #-------------------- 路側帯追従（反射強度ベース）--------------------
+            if (
+                (0 <= self.waypoint_number <= 3)
+                # TODO: 実際の路側帯区間の waypoint 番号に置き換える
+                and roadside_follow_ok
+                and abs(self.roadside_follow_rad * 180 / math.pi - target_theta) < 40.0
+            ) :
+                speed = 0.25
+                print("### Roadside ### Befor target_theta[deg]:",target_theta)
+                target_rad = self.roadside_follow_rad
+                target_theta = (target_rad) * (180 / math.pi)
+                print("### Roadside ### After target_theta[deg]:",target_theta)
+
+            elif np.any(lh_obs) and np.any(rh_obs) :  #真ん中　
                 target_theta = (target_rad) * (180 / math.pi)
                 print("--- Center --- Befor target_theta[deg]:",target_theta)
                 speed = 0.25
