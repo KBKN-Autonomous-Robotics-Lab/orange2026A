@@ -62,7 +62,8 @@ setup(
             'marker_utils = try_navigation.marker_utils:main',
             'pcd_buffer = try_navigation.pcd_buffer:main',
             'road_edge_stop = try_navigation.road_edge_stop:main',
-            'intensity_inspector = try_navigation.intensity_inspector:main'
+            'intensity_inspector = try_navigation.intensity_inspector:main',
+            'roadside_follow = try_navigation.roadside_follow:main'
         ],
     },
 )

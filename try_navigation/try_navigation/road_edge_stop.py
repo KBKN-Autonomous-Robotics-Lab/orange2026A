@@ -125,7 +125,7 @@ class RoadEdgeStop(Node):
         self.declare_parameter('confirm_count', 3)
         self.declare_parameter('hold_after_stop', False)
         self.declare_parameter('auto_enable', True)
-        self.declare_parameter('odom_topic', '/odom/wheel_spimu')
+        self.declare_parameter('odom_topic', '/odom')
         self.declare_parameter('verbose', True)
 
         # ---------- QoS ----------
