@@ -60,7 +60,7 @@ class PcdHeightSegmentation(Node):
         self.HIGH_HIGHT_MIN = 2000/1000; #hight range[m] # IGVC20250601 -150 -> -10
         self.HIGH_HIGHT_MAX = 4000/1000; #hight range[m]
         #set step range
-        self.STEP_HIGHT_MIN =   140/1000; #hight range[m]
+        self.STEP_HIGHT_MIN =   100/1000; #hight range[m]
         self.STEP_HIGHT_MAX =   self.OBS_HIGHT_MIN# 200/1000; #hight range[m]
         self.STEP_X_MIN     = -1500/1000; #x mask range[m]
         self.STEP_X_MAX     =  1500/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]

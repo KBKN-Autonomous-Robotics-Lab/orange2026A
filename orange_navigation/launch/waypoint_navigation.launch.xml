@@ -3,8 +3,8 @@
   <!-- Arguments -->
   <arg name="use_sim_time" default="true"/>
   <arg name="kbkn_maps_path" default="hosei/2026/output_map.yaml"/>
-  <arg name="map_file_path" default="$(find-pkg-share kbkn_maps)/maps/$(var kbkn_maps_path)"/>
-  <arg name="waypoints_file" default="$(find-pkg-share kbkn_maps)/waypoints/$(var kbkn_maps_path)"/>
+  <arg name="map_file_path" default="$(find-pkg-share kbkn_maps)/maps/hosei/2024/main/map.yaml"/>
+  <arg name="waypoints_file" default="$(find-pkg-share kbkn_maps)/waypoints/hosei/2024/main/nakaniwa_map_1030.yaml"/>
   <arg name="config_file_path" default="$(find-pkg-share orange_navigation)/config/navigation2_params.yaml"/>
   <arg name="world_frame" default="map"/>
   <arg name="robot_frame" default="base_footprint"/>

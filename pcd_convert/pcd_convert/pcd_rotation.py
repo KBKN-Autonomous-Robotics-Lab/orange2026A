@@ -134,8 +134,8 @@ class PcdRotation(Node):
                     self.MID360_HIGHT = - intercept; #hight position[m]
                     self.THETA_INIT_Y = self.THETA_INIT_Y + theta #[deg]
                     self.initialize_calibration = 1
-                    #print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
-                    #print(f"self.THETA_INIT_Y ={self.THETA_INIT_Y}")
+                    print(f"self.MID360_HIGHT ={self.MID360_HIGHT}")
+                    print(f"self.THETA_INIT_Y ={self.THETA_INIT_Y}")
                     
         
         #add mid height position

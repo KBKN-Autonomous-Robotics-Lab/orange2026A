@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
   <arg name="use_sim_time" default="true"/>
-  <arg name="with_ros2bag" default="false"/>
+  <arg name="with_ros2bag" default="true"/>
   <arg name="online_slam_config_file_path" default="$(find-pkg-share orange_slam)/config/online_slam_toolbox_params.yaml"/>
   <arg name="offline_slam_config_file_path" default="$(find-pkg-share orange_slam)/config/offline_slam_toolbox_params.yaml"/>
   <arg name="rviz_config_file_path" default="$(find-pkg-share orange_description)/rviz2/slam_toolbox.rviz"/>

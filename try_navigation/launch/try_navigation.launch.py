@@ -25,7 +25,7 @@ def generate_launch_description():
     odom = LaunchConfiguration('odom')
     declare_odom_arg = DeclareLaunchArgument(
         'odom',
-        default_value='/odom_ekf_match', # odom_ekf_match
+        default_value='/fusion/odom', # odom_ekf_match
         description='Odometry topic name'
     )
     
@@ -79,7 +79,7 @@ def generate_launch_description():
             executable='pcd_merge',
             name='pointcloud_merger_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': True}],
             arguments=[]
         ),
         

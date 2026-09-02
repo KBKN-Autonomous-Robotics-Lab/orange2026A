@@ -23,7 +23,7 @@ class Odom_Combination(Node):
         
         # subscription
         self.odom_sub = self.create_subscription(Odometry, '/glim_ros/odom_corrected', self.get_odom, qos_profile)
-        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/wheel_spimu', self.get_gps_odom, qos_profile)
+        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/UM982', self.get_gps_odom, qos_profile)
         
         # publisher
         self.odom_pub = self.create_publisher(Odometry, '/odom/combine_glim', qos_profile)
@@ -54,8 +54,9 @@ class Odom_Combination(Node):
             roll, pitch, yaw = quaternion_to_euler(x, y, z, w)
             self.initial_xy = (init_x, init_y)
             self.init_theta = yaw
+            self.init_theta = -1.365
             #self.yaw_offset = self.init_theta - self.theta_z
-            self.get_logger().info(f"Initial /odom/UM982 position set to: x={init_x:.3f}, y={init_y:.3f}")   
+            self.get_logger().info(f"Initial /odom/UM982 position set to: x={init_x:.3f}, y={init_y:.3f}, theta={self.init_theta:.3f}")   
     
     def yaw_to_orientation(self, yaw):
         orientation_z = np.sin(yaw / 2.0)
@@ -80,7 +81,7 @@ class Odom_Combination(Node):
         sin_theta = math.sin(self.init_theta)
 
         rotated_x = cos_theta * pos_x - sin_theta * pos_y
-        rotated_y = sin_theta * pos_x + cos_theta * pos_y
+        rotated_y = -(sin_theta * pos_x + cos_theta * pos_y)
 
         # init xy + rotate xy
         combined_x = self.initial_xy[0] + rotated_x
