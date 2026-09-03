@@ -83,6 +83,7 @@ class PathFollower(Node):
         self.stop_line_sub = self.create_subscription(std_msgs.Bool, "/stop_line", self.stopline_callback, 10)
         self.roadside_follow_detected_sub = self.create_subscription(std_msgs.Bool, '/roadside/detected', self.roadside_follow_detected_callback, qos_profile)
         self.roadside_follow_angle_sub = self.create_subscription(std_msgs.Float32, '/roadside/target_angle', self.roadside_follow_angle_callback, qos_profile)
+        self.road_edge_stop_sub = self.create_subscription(std_msgs.Bool, '/road_edge/stop', self.road_edge_stop_callback, qos_profile)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -93,6 +94,7 @@ class PathFollower(Node):
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
         self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
         self.pcd_jam_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_jam', qos_profile) 
+        self.road_edge_enable_publisher = self.create_publisher(std_msgs.Bool, '/road_edge_stop/enable', qos_profile)
         #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
 
         #パラメータ init
@@ -195,6 +197,14 @@ class PathFollower(Node):
         self.stop_line = None
         self.start_rotation = False
 
+        #road edge stop
+        self.road_edge_stop = False
+        self.road_edge_time = None
+        self.road_edge_speed = 0.30
+        self.road_edge_wp = [
+            (999, 999),
+        ]
+
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
         global navigation_status
@@ -270,6 +280,16 @@ class PathFollower(Node):
     
     def stopline_callback(self, msg):
         self.stop_line = msg.data
+
+    def road_edge_stop_callback(self, msg):
+        self.road_edge_stop = msg.data
+        self.road_edge_time = self.get_clock().now()
+    
+    def road_edge_ok(self):
+        if not self.road_edge_stop or self.road_edge_time is None:
+            return False
+        age = (self.get_clock().now() - self.road_edge_time).nanoseconds / 1e9
+        return age < 0.5
         
     def robot_ctrl(self):
         #self.get_logger().info('0.05秒ごとに車両制御を実行')
@@ -539,7 +559,15 @@ class PathFollower(Node):
         if abs(target_theta)  > 90:
             speed = -0.10
         if np.any(c_obs_back) :
-            speed = 0.10     
+            speed = 0.10    
+
+        #############################################################
+        # Road Edge Stop（横断歩道の縞から道路端を推定）
+        #############################################################
+        in_road_edge_wp = any(a <= self.waypoint_number <= b for a, b in self.road_edge_wp)
+        self.road_edge_enable_publisher.publish(std_msgs.Bool(data=bool(in_road_edge_wp)))
+        if in_road_edge_wp:
+            speed = min(speed, self.road_edge_speed)
         
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
@@ -696,11 +724,17 @@ class PathFollower(Node):
                 else:
                     self.get_logger().info('####### through flag on %f #######' % (self.stop_num))
                 self.stop_num = self.stop_num + 1;     
-            else:
+            elif self.stop_xy[self.stop_num,5] == 1.0:
                 if self.stop_line:
                     self.stop_flag = 1;
                     navigation_status = "STOP"
-                    self.stop_num = self.stop_num + 1;     
+                    self.stop_num = self.stop_num + 1;
+            else:   # 6列目 == 2.0 : 道路端停止（横断歩道の縞から推定）
+                if self.road_edge_ok():
+                    self.get_logger().info('####### road edge stop %f #######' % (self.stop_num))
+                    self.stop_flag = 1;
+                    navigation_status = "STOP"
+                    self.stop_num = self.stop_num + 1;  
 
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
