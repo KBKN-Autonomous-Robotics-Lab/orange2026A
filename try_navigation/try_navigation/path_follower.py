@@ -312,6 +312,10 @@ class PathFollower(Node):
         speed_set = 0.55#55 AutoNav 1.10
         speed = speed_set
 
+        # down speed for stop waypoint
+        if (36 <= self.waypoint_number <= 37) or (self.waypoint_number == 99):
+            speed = 0.2
+
         #############################################################
         # Roadside Tracking (Camera)
         #############################################################
