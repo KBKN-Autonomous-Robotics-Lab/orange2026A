@@ -57,7 +57,7 @@ class PathFollower(Node):
         )
 
         # set parameter (launch can change this parameter)
-        self.declare_parameter('odom', '/fusion/odom')
+        self.declare_parameter('odom', '/odom_ekf_match')
         
         # define parameter
         odom_topic = self.get_parameter('odom').get_parameter_value().string_value
@@ -312,9 +312,7 @@ class PathFollower(Node):
         speed_set = 0.55#55 AutoNav 1.10
         speed = speed_set
 
-        # down speed for stop waypoint
-        if (36 <= self.waypoint_number <= 37) or (self.waypoint_number == 99):
-            speed = 0.2
+        
 
         #############################################################
         # Roadside Tracking (Camera)
@@ -545,6 +543,10 @@ class PathFollower(Node):
         if np.any(c_obs_back) :
             speed = 0.10     
         
+        # down speed for stop waypoint
+        if (36 <= self.waypoint_number <= 37) or (self.waypoint_number == 99):
+            speed = 0.10
+        
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
         #else:
@@ -573,6 +575,7 @@ class PathFollower(Node):
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
             #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
             #twist_msg.angular.z = -target_rad_pd # 角速度 (rad/s) back left to left
+            print(f"speed ={last_speed}")
         elif self.rotation_flag == 1:
             yaw_error = self.target_yaw - self.ref_theta_z
             if yaw_error > 180:
