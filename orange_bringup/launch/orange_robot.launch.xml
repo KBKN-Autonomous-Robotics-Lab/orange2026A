@@ -73,7 +73,7 @@
   </node>-->
 
   <!-- spresense imu -->
-  <node pkg="cxd5602pwbimu" exec="cxd5602pwbimu_node">
+  <!--<node pkg="cxd5602pwbimu" exec="cxd5602pwbimu_node">
     <param name="port" value="/dev/sensors/spresense_imu"/>
     <param name="frame_id" value="imu_link"/>
     <param name="imu_topic" value="/imu/spresense"/>
@@ -81,27 +81,27 @@
     <param name="baudrate" value="460800"/>
     <param name="gyro_bias_correction" value="true"/>
     <param name="gyro_bias_samples" value="4800"/>
-  </node>
+  </node>-->
   <!-- madgwick filter node -->
-  <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="madgwick_filter">
+  <!--<node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="madgwick_filter">
     <param from="$(find-pkg-share cxd5602pwbimu)/config/madgwick.yaml"/>
     <remap from="/imu/data_raw" to="/imu/spresense"/>
     <remap from="/imu/data" to="/imu/spresense/madgwick"/>
-  </node>
+  </node>-->
   <!-- initial_yaw_corrector -->
-  <node pkg="cxd5602pwbimu" exec="initial_yaw_corrector" name="spimu_yaw_corrector">
+  <!--<node pkg="cxd5602pwbimu" exec="initial_yaw_corrector" name="spimu_yaw_corrector">
     <param name="input_topic" value="/imu/spresense/madgwick"/>
     <param name="output_topic" value="/imu/spresense/inityaw"/>
-  </node>
+  </node>-->
   <!-- wheel_imu_odom for spresense imu -->
-  <node pkg="cxd5602pwbimu" exec="wheel_spimu_odom">
+  <!--<node pkg="cxd5602pwbimu" exec="wheel_spimu_odom">
     <param name="odom_topic" value="/odom"/>
     <param name="imu_topic" value="/imu/spresense/inityaw"/>
     <param name="publish_TF" value="false"/>
-  </node>
+  </node>-->
 
   <!-- imu  -->
-  <!--
+  
   <include file="$(find-pkg-share icm_20948)/launch/run.launch.xml">
     <arg name="port" value="/dev/sensors/imu"/>
     <arg name="time_out" value="0.5"/>
@@ -109,7 +109,7 @@
     <arg name="imu_topic" value="imu"/>
     <arg name="frame_id" value="imu_link"/>
     <arg name="debug" value="$(var debug_imu)"/>
-  </include>-->
+  </include>
   <!-- robot_localization -->
   <!--<include file="$(find-pkg-share orange_sensor_tools)/launch/localization.launch.xml">
     <arg name="odom_in" value="$(var odom_topic)"/>
@@ -118,7 +118,7 @@
   </include>-->
   <!-- GPSposition_publisher -->
   <!-- GPSheading_publisher -->
-  <node pkg="orange_gnss" exec="get_gnss_data_ttyUSB" output="screen">
+  <!--<node pkg="orange_gnss" exec="get_gnss_data_ttyUSB" output="screen">
     <param name="port" value="/dev/sensors/GNSS_UM982"/>
     <param name="baud" value="115200"/>
     <param name="country_id" value="0"/>
@@ -133,14 +133,34 @@
     <param name="start_lat" value="$(var start_lat)"/>
     <param name="start_lon" value="$(var start_lon)"/>
     <param name="time_out" value="1.0"/>
-  </node>
+  </node>-->
   <!-- 
   <node pkg="orange_gnss" exec="GPSodom_correction" output="screen">
   </node>
    -->
-  <!-- combination_GPSposition_GPSheading -->
-  <!--<node pkg="orange_gnss" exec="combination" output="screen">
-  </node>-->
+  <!-- F9P GPS lonlat publisher -->
+  <node pkg="orange_gnss" exec="get_lonlat_ttyACM" output="screen">
+    <param name="port" value="/dev/sensors/GNSSbase"/>
+    <param name="baud" value="9600"/>
+    <param name="country_id" value="0"/>
+    <param name="heading" value="$(var start_heading)"/>
+    <param name="start_lat" value="$(var start_lat)"/>
+    <param name="start_lon" value="$(var start_lon)"/>
+  </node>
+  <!-- F9P GPS angle publisher -->
+  <node pkg="orange_gnss" exec="movingbase_yaw_to_quat" output="screen">
+    <param name="port" value="/dev/sensors/GNSSrover"/>
+    <param name="baud" value="9600"/>
+    <param name="time_out" value="1.0"/>
+  </node>
+  <!-- F9P GPS odom publisher -->
+  <node pkg="orange_gnss" exec="lonlat_to_odom" output="screen">
+    <param name="heading" value="0.0"/>
+    <param name="start_lat" value="$(var start_lat)"/>
+    <param name="start_lon" value="$(var start_lon)"/>
+  </node>
+  <node pkg="orange_gnss" exec="combination" output="screen">
+  </node>
   <!-- ekf_myself -->
   <!-- node pkg="orange_gnss" exec="ekf_myself" output="screen" >
     <param name="ekf_publish_TF" value="True"/>
