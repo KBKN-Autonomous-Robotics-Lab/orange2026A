@@ -296,6 +296,9 @@ class PathFollower(Node):
         #relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -reverse_theta_z)
         target_rad = math.atan2(relative_point_rot[1], relative_point_rot[0])
         target_theta = (target_rad) * (180 / math.pi)
+
+        #print("theta_z[deg]:",theta_z)
+
         
         ################### Straight Waypoint ############################
         if 191 <= self.waypoint_number <= 192:# or 0 <= self.waypoint_number <= 5:
@@ -452,6 +455,7 @@ class PathFollower(Node):
     
 
         roadside_follow_ok = False
+
         if self.roadside_follow_detected and self.roadside_follow_time is not None:
             age = (self.get_clock().now() - self.roadside_follow_time).nanoseconds / 1e9 
             if age < 0.5:
@@ -460,7 +464,7 @@ class PathFollower(Node):
         if ~np.any(ch_obs) :
             #--------------路側帯追従（反射強度ベース）----------
             if (
-                (999 <= self.waypoint_number <= 999)
+                (261 <= self.waypoint_number <= 279)
                 and roadside_follow_ok
                 and abs(self.roadside_follow_rad * 180 / math.pi - target_theta) < 70.0
             ):
@@ -488,13 +492,13 @@ class PathFollower(Node):
             elif ~np.any(lh_obs) and np.any(rh_obs):   #右寄り　
                 speed = 0.25
                 if (
-                    (18 <= self.waypoint_number <= 20 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (139 <= self.waypoint_number <= 143 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
-                    or (146 <= self.waypoint_number <= 151 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
-                    or (179 <= self.waypoint_number <= 188 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (198 <= self.waypoint_number <= 208 and 90 - self.angle_diff <= theta_z <= 90 + self.angle_diff)
-                    or (33 <= self.waypoint_number <= 35 and -20 - self.angle_diff <= theta_z <= -20 + self.angle_diff)
-                ): #1 3 5 6 7 8
+                    (25 <= self.waypoint_number <= 38 and (-30 <= theta_z <= 30))
+                    or (116 <= self.waypoint_number <= 127 and (-30 <= theta_z <= 30))
+                    or (130 <= self.waypoint_number <= 143 and (-30 <= theta_z <= 30))
+                    or (290 <= self.waypoint_number <= 304 and (-30 <= theta_z <= 30))
+                    or (311 <= self.waypoint_number <= 314 and (-30 <= theta_z <= 30))
+                    or (321 <= self.waypoint_number <= 354 and (60 <= theta_z <= 120))
+                ): 
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -505,13 +509,31 @@ class PathFollower(Node):
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
+            elif np.any(lh_obs):
+                speed = 0.25
+                if(
+                    (50 <= self.waypoint_number <= 57 and (-120 <= theta_z <= -60))
+                ):
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
+                    lh_obs_close = min(lh_obs[1,:]) # y0 lh min
+                    lh_dist = -0.65 # 0.65
+                    if self.waypoint_number==55:
+                        lh_dist = -0.45 # 0.65
+                    cy = cf
+                    cx = lh_obs_close + lh_dist
+                    target_rad = math.atan2(cx, cf)
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! After target_theta[deg]:",target_theta)
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
                 speed = 0.25
                 if (
-                    (65 <= self.waypoint_number <= 72 and -90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)
-                    or (162 <= self.waypoint_number <= 168 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (172 <= self.waypoint_number <= 175 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    ):    #2 4
+                    (152 <= self.waypoint_number <= 183 and (-120 <= theta_z <= -60))
+                    or (188 <= self.waypoint_number <= 195 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (203 <= self.waypoint_number <= 240 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (364 <= self.waypoint_number <= 377 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (384 <= self.waypoint_number <= 395 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                ):   
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
@@ -547,8 +569,8 @@ class PathFollower(Node):
             speed = 0.10     
         
         # down speed for stop waypoint
-        if (36 <= self.waypoint_number <= 37) or (self.waypoint_number == 99):
-            speed = 0.10
+        if (68 <= self.waypoint_number <= 68) or (self.waypoint_number == 74):
+            speed = 0.20
         
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
@@ -781,8 +803,8 @@ class PathFollower(Node):
             (self.waypoint_number == 45)
             or (self.waypoint_number == 137)
             or (self.waypoint_number == 177)
-            or (76 <= self.waypoint_number <= 78)
-            or (148 <= self.waypoint_number <= 153)
+            or (62 <= self.waypoint_number <= 67)
+            or (43 <= self.waypoint_number <= 49)
             or (162 <= self.waypoint_number <= 167)
             or (195 <= self.waypoint_number <= 198)
             or (227 <= self.waypoint_number <= 232)

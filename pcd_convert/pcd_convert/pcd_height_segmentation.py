@@ -8,6 +8,7 @@ import numpy as np
 import math
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 import time
+from std_msgs.msg import Int32
 
 
 # C++と同じく、Node型を継承します。
@@ -32,6 +33,7 @@ class PcdHeightSegmentation(Node):
         
         # Subscriptionを作成。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation_merge', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name /pcd_rotation_merge
+        self.waypoint_number_sub = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
@@ -44,7 +46,8 @@ class PcdHeightSegmentation(Node):
         
         #パラメータ
         #set obs range
-        self.OBS_HIGHT_MIN =   150/1000; #hight range[m]
+        self.OBS_HIGHT_MIN =   180/1000; #hight range[m]
+        self.OBS_HIGHT_MIN_SLOPE =   300/1000; #hight range[m]
         self.OBS_HIGHT_MAX =  1000/1000; #hight range[m]
         self.OBS_MASK_X_MIN = -550/1000; #x mask range[m]
         self.OBS_MASK_X_MAX =  400/1000; #x mask range[m]
@@ -52,7 +55,7 @@ class PcdHeightSegmentation(Node):
         self.OBS_MASK_Y_MAX =  350/1000; #y mask range[m]
         #set ground range
         self.GROUND_HIGHT_MIN = -150/1000; #hight range[m] # IGVC20250601 -150 -> -10
-        self.GROUND_HIGHT_MAX =  120/1000; #hight range[m]
+        self.GROUND_HIGHT_MAX =  150/1000; #hight range[m]
         #set middle range
         self.MIDDLE_HIGHT_MIN = 500/1000; #hight range[m] # IGVC20250601 -150 -> -10
         self.MIDDLE_HIGHT_MAX = 1000/1000; #hight range[m]
@@ -73,7 +76,13 @@ class PcdHeightSegmentation(Node):
         self.LOW_STEP_X_MAX     =  1500/1000; #x mask range[rosbag2_2024_10_26-03_14_14_20241026_kakunin_bag1m]
         self.LOW_STEP_Y_MIN     = -5000/1000; #y mask range[m]
         self.LOW_STEP_Y_MAX     =  5000/1000; #y mask range[m]
+
+        self.waypoint_number = 0
         
+    def get_waypoint_number(self, msg):
+        #get waypoint number
+        self.waypoint_number = msg.data
+    
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
         points = np.frombuffer(cloud_msg.data, dtype=np.uint8).reshape(-1, cloud_msg.point_step)
@@ -101,7 +110,10 @@ class PcdHeightSegmentation(Node):
         print(f"points ={points.shape}")
         
         #obs segment
-        pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX)
+        if 23 <= self.waypoint_number <= 24:
+            pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN_SLOPE, self.OBS_HIGHT_MAX)
+        else:
+            pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX)
         pcd_obs = self.pcd_mask(pcd_obs_height, self.OBS_MASK_X_MIN, self.OBS_MASK_X_MAX, self.OBS_MASK_Y_MIN, self.OBS_MASK_Y_MAX)
         print(f"pcd_obs_height ={pcd_obs_height.shape}")
         print(f"pcd_obs ={pcd_obs.shape}")

@@ -9,6 +9,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
+USE_SIM_TIME = False
+
 def generate_launch_description():
     rviz_config_dir = os.path.join(
         get_package_share_directory('try_navigation'),
@@ -52,7 +54,7 @@ def generate_launch_description():
             executable='rviz2',
             name='rviz2',
             arguments=['-d', rviz_config_dir],
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             output='screen'
         ),
         #get livox data
@@ -65,21 +67,21 @@ def generate_launch_description():
             executable='pcd_rotation',
             name='pcd_rotation_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         Node(package='pcd_convert',
             executable='pcd_rotation_lidar2',
             name='pcd_rotation_lidar2_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         Node(package='pcd_convert',
             executable='pcd_merge',
             name='pointcloud_merger_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         
@@ -88,7 +90,7 @@ def generate_launch_description():
             executable='odom_combination',
             name='odom_combination',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[],
         ),
    
@@ -97,7 +99,7 @@ def generate_launch_description():
             executable='ekf_myself_gps',
             name='sensor_fusion',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         
@@ -106,7 +108,7 @@ def generate_launch_description():
             executable='pcd_height_segmentation',
             name='pcd_heigth_segmentation_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         
@@ -115,7 +117,7 @@ def generate_launch_description():
             executable='pcd_reflect_segmentation',
             name='pcd_reflect_segmentation_node',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
         ),
         
@@ -153,7 +155,7 @@ def generate_launch_description():
             executable='potential_astar',
             name='potential_astar_node',
             output='screen',
-            parameters=[{'odom': odom}, {'use_sim_time': False}],
+            parameters=[{'odom': odom}, {'use_sim_time': USE_SIM_TIME}],
             arguments=[],
         ),
         #robot ctrl
@@ -161,7 +163,7 @@ def generate_launch_description():
             executable='path_follower',
             name='path_follower_node',
             output='screen',
-            parameters=[{'odom': odom}, {'use_sim_time': False}],
+           parameters=[{'odom': odom}, {'use_sim_time': USE_SIM_TIME}],
             arguments=[],
         ),
         
@@ -170,7 +172,7 @@ def generate_launch_description():
             executable='button',
             name='button',
             output='screen',
-            parameters=[{'use_sim_time': False}],
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[],
         ),
         #takamori Autonav

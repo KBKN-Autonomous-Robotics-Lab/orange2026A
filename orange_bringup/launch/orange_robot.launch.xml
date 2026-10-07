@@ -30,10 +30,10 @@
   <arg name="nav_topic" default="/nav_state"/>
   <arg name="estop_topic" default="/estop"/>
   <!-- initial heading:housei nakaniwa=179.169287 tsukuba= 93.0 -->
-  <!-- initial start_lat:housei nakaniwa=35.425952230280004 tsukuba right=36.04974095972727 tsukuba_left=36.04976195993636 -->
-  <!-- initial start_lon:housei nakaniwa=139.31380123427 tsukuba right=140.04593633886364 tsukuba_left=140.04593755179093 -->
-  <arg name="start_lat" default="35.425952230280004"/>
-  <arg name="start_lon" default="139.31380123427"/>
+  <!-- initial start_lat:housei nakaniwa=35.425952230280004            tsukuba = 36.049743  -->
+  <!-- initial start_lon:housei nakaniwa=139.31380123427               tsukuba = 140.0461064-->
+  <arg name="start_lat" default="36.049743"/>
+  <arg name="start_lon" default="140.0461064"/>
   <arg name="start_heading" default="0.0"/>
   <arg name="xacro_file_path" default="$(find-pkg-share orange_description)/xacro/orange_robot.xacro"/>
   <arg name="motor_driver_config_file_path" default="$(find-pkg-share orange_bringup)/config/motor_driver_params.yaml"/>
