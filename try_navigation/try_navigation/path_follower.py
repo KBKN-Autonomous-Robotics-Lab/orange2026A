@@ -57,7 +57,7 @@ class PathFollower(Node):
         )
 
         # set parameter (launch can change this parameter)
-        self.declare_parameter('odom', '/fusion/odom')
+        self.declare_parameter('odom', '/odom_ekf_match')
         
         # define parameter
         odom_topic = self.get_parameter('odom').get_parameter_value().string_value
@@ -72,7 +72,7 @@ class PathFollower(Node):
         self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom_ref, qos_profile_sub) #/fusion/odom
+        self.subscription = self.create_subscription(nav_msgs.Odometry, '/odom/UM982' , self.get_odom_ref, qos_profile_sub) #/fusion/odom
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
         self.step_sub = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_low_step', self.low_obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
@@ -136,9 +136,9 @@ class PathFollower(Node):
         
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
-            [-30.0,  -3.0, -20.0,  20.0, 1.0, 1.0,  0.0], #nakaniwa test
-            [  0.0,  10.0, -46.0, -36.0, 1.0, 0.0, 90.0], #nakaniwa test2
-            [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0,  0.0], #shiyakusyo 1 tsukuba2026
+            [107.0, 109.0,-255.5,-250.0, 1.0, 0.0,  0.0], #nakaniwa test
+            [116.0, 120.0,-465.0,-460.0, 1.0, 0.0, -2.0], #nakaniwa test2 305
+            [ 56.1,  76.1, -18.0, -17.0, 1.0, 1.0,  0.0], #shiyakusyo 1 tsukuba2026
             [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
             [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
             [100.0, 101.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan1
@@ -203,7 +203,13 @@ class PathFollower(Node):
         # クライアントから送られたaをstop_flagに代入
         self.stop_flag = goal_handle.request.a
         print(f"stop_flag set to: {self.stop_flag}")
-        navigation_status = "GO"
+        if self.stop_flag == 0:
+            navigation_status = "GO"
+            self.rotation_flag = 0
+        else:
+            navigation_status = "STOP"
+            self.target_yaw = float(goal_handle.request.b)
+            self.rotation_flag = 1
         
         # フィードバックの返信
         for i in range(1):
@@ -293,6 +299,9 @@ class PathFollower(Node):
         #relative_point_rot, t_point_rot_matrix = rotation_xyz(relative_point, theta_x, theta_y, -reverse_theta_z)
         target_rad = math.atan2(relative_point_rot[1], relative_point_rot[0])
         target_theta = (target_rad) * (180 / math.pi)
+
+        #print("theta_z[deg]:",theta_z)
+
         
         ################### Straight Waypoint ############################
         if 191 <= self.waypoint_number <= 192:# or 0 <= self.waypoint_number <= 5:
@@ -311,6 +320,8 @@ class PathFollower(Node):
         
         speed_set = 0.55#55 AutoNav 1.10
         speed = speed_set
+
+        
 
         #############################################################
         # Roadside Tracking (Camera)
@@ -447,6 +458,7 @@ class PathFollower(Node):
     
 
         roadside_follow_ok = False
+
         if self.roadside_follow_detected and self.roadside_follow_time is not None:
             age = (self.get_clock().now() - self.roadside_follow_time).nanoseconds / 1e9 
             if age < 0.5:
@@ -455,7 +467,7 @@ class PathFollower(Node):
         if ~np.any(ch_obs) :
             #--------------路側帯追従（反射強度ベース）----------
             if (
-                (999 <= self.waypoint_number <= 999)
+                (261 <= self.waypoint_number <= 279)
                 and roadside_follow_ok
                 and abs(self.roadside_follow_rad * 180 / math.pi - target_theta) < 70.0
             ):
@@ -483,13 +495,13 @@ class PathFollower(Node):
             elif ~np.any(lh_obs) and np.any(rh_obs):   #右寄り　
                 speed = 0.25
                 if (
-                    (18 <= self.waypoint_number <= 20 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (139 <= self.waypoint_number <= 143 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
-                    or (146 <= self.waypoint_number <= 151 and 0 - self.angle_diff <= theta_z <= 0 + self.angle_diff)
-                    or (179 <= self.waypoint_number <= 188 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (198 <= self.waypoint_number <= 208 and 90 - self.angle_diff <= theta_z <= 90 + self.angle_diff)
-                    or (33 <= self.waypoint_number <= 35 and -20 - self.angle_diff <= theta_z <= -20 + self.angle_diff)
-                ): #1 3 5 6 7 8
+                    (25 <= self.waypoint_number <= 38 and (-30 <= theta_z <= 30))
+                    or (116 <= self.waypoint_number <= 127 and (-30 <= theta_z <= 30))
+                    or (130 <= self.waypoint_number <= 143 and (-30 <= theta_z <= 30))
+                    or (290 <= self.waypoint_number <= 304 and (-30 <= theta_z <= 30))
+                    or (311 <= self.waypoint_number <= 314 and (-30 <= theta_z <= 30))
+                    or (321 <= self.waypoint_number <= 354 and (60 <= theta_z <= 120))
+                ): 
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -500,13 +512,31 @@ class PathFollower(Node):
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
+            elif np.any(lh_obs):
+                speed = 0.25
+                if(
+                    (50 <= self.waypoint_number <= 57 and (-120 <= theta_z <= -60))
+                ):
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
+                    lh_obs_close = min(lh_obs[1,:]) # y0 lh min
+                    lh_dist = -0.65 # 0.65
+                    if self.waypoint_number==55:
+                        lh_dist = -0.45 # 0.65
+                    cy = cf
+                    cx = lh_obs_close + lh_dist
+                    target_rad = math.atan2(cx, cf)
+                    target_theta = (target_rad) * (180 / math.pi)
+                    print("!!!LH!!!! After target_theta[deg]:",target_theta)
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
                 speed = 0.25
                 if (
-                    (65 <= self.waypoint_number <= 72 and -90 - self.angle_diff <= theta_z <= -90 + self.angle_diff)
-                    or (162 <= self.waypoint_number <= 168 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    or (172 <= self.waypoint_number <= 175 and ((-150 - self.angle_diff <= theta_z <= -150) or (150  <= theta_z <= 150 + self.angle_diff)))
-                    ):    #2 4
+                    (152 <= self.waypoint_number <= 183 and (-120 <= theta_z <= -60))
+                    or (188 <= self.waypoint_number <= 195 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (203 <= self.waypoint_number <= 240 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (364 <= self.waypoint_number <= 377 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    or (384 <= self.waypoint_number <= 395 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                ):   
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
@@ -541,6 +571,10 @@ class PathFollower(Node):
         if np.any(c_obs_back) :
             speed = 0.10     
         
+        # down speed for stop waypoint
+        if (68 <= self.waypoint_number <= 68) or (self.waypoint_number == 74):
+            speed = 0.20
+        
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
         #else:
@@ -569,6 +603,7 @@ class PathFollower(Node):
             twist_msg.angular.z = target_rad_pd  # 角速度 (rad/s)
             #twist_msg.linear.x = -speed #0.3  # 前進速度 (m/s)
             #twist_msg.angular.z = -target_rad_pd # 角速度 (rad/s) back left to left
+            print(f"speed ={last_speed}")
         elif self.rotation_flag == 1:
             yaw_error = self.target_yaw - self.ref_theta_z
             if yaw_error > 180:
@@ -662,6 +697,7 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
+        '''
         if self.waypoint_number >= 225: # after dourotan4
             if self.stop_num <= 15:
                 self.stop_num = 16
@@ -680,6 +716,7 @@ class PathFollower(Node):
         elif self.waypoint_number >= 57: # after dourotan2
             if self.stop_num <= 2:
                 self.stop_num = 3
+        '''
         
         # odometry stop point set
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
@@ -771,8 +808,8 @@ class PathFollower(Node):
             (self.waypoint_number == 45)
             or (self.waypoint_number == 137)
             or (self.waypoint_number == 177)
-            or (76 <= self.waypoint_number <= 78)
-            or (148 <= self.waypoint_number <= 153)
+            or (62 <= self.waypoint_number <= 67)
+            or (43 <= self.waypoint_number <= 49)
             or (162 <= self.waypoint_number <= 167)
             or (195 <= self.waypoint_number <= 198)
             or (227 <= self.waypoint_number <= 232)
