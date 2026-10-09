@@ -110,7 +110,7 @@ class PcdHeightSegmentation(Node):
         print(f"points ={points.shape}")
         
         #obs segment
-        if 23 <= self.waypoint_number <= 24:
+        if (23 <= self.waypoint_number <= 24) or (280 <= self.waypoint_number <= 281):
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN_SLOPE, self.OBS_HIGHT_MAX)
         else:
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX)

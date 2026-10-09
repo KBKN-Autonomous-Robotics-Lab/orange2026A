@@ -72,7 +72,7 @@ class PathFollower(Node):
         self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ekf_match', self.get_odom, qos_profile_sub)
         #self.subscription = self.create_subscription(nav_msgs.Odometry,'/odom_ref_slam', self.get_odom_ref, qos_profile_sub)
-        self.subscription = self.create_subscription(nav_msgs.Odometry, odom_topic, self.get_odom_ref, qos_profile_sub) #/fusion/odom
+        self.subscription = self.create_subscription(nav_msgs.Odometry, '/odom/UM982' , self.get_odom_ref, qos_profile_sub) #/fusion/odom
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_obs', self.obs_steer, qos_profile)
         self.step_sub = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_low_step', self.low_obs_steer, qos_profile)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_pose_callback, qos_profile)
@@ -136,9 +136,9 @@ class PathFollower(Node):
         
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
-            [-30.0,  -3.0, -20.0,  20.0, 1.0, 1.0,  0.0], #nakaniwa test
-            [  0.0,  10.0, -46.0, -36.0, 1.0, 0.0, 90.0], #nakaniwa test2
-            [ 56.1,  76.1, -18.0, -17.0, 1.0, 0.0,  0.0], #shiyakusyo 1 tsukuba2026
+            [107.0, 109.0,-255.5,-250.0, 1.0, 0.0,  0.0], #nakaniwa test
+            [116.0, 120.0,-465.0,-460.0, 1.0, 0.0, -2.0], #nakaniwa test2 305
+            [ 56.1,  76.1, -18.0, -17.0, 1.0, 1.0,  0.0], #shiyakusyo 1 tsukuba2026
             [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
             [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
             [100.0, 101.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan1
@@ -205,8 +205,11 @@ class PathFollower(Node):
         print(f"stop_flag set to: {self.stop_flag}")
         if self.stop_flag == 0:
             navigation_status = "GO"
+            self.rotation_flag = 0
         else:
             navigation_status = "STOP"
+            self.target_yaw = float(goal_handle.request.b)
+            self.rotation_flag = 1
         
         # フィードバックの返信
         for i in range(1):
@@ -694,6 +697,7 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
+        '''
         if self.waypoint_number >= 225: # after dourotan4
             if self.stop_num <= 15:
                 self.stop_num = 16
@@ -712,6 +716,7 @@ class PathFollower(Node):
         elif self.waypoint_number >= 57: # after dourotan2
             if self.stop_num <= 2:
                 self.stop_num = 3
+        '''
         
         # odometry stop point set
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):

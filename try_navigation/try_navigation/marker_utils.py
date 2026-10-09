@@ -18,7 +18,7 @@ class MarkerVisualizer(Node):
 
         #-----------subscriber-----------
         self.oodm_sub = self.create_subscription(Odometry, '/odom', self.odom_callback,10)
-        self.oodm_sub = self.create_subscription(Odometry, '/fusion/odom', self.fusion_odom_callback,10)
+        self.oodm_sub = self.create_subscription(Odometry, '/odom_ekf_match', self.fusion_odom_callback,10)
 
 
         self.pub_rate_hz = 1.0
@@ -26,8 +26,8 @@ class MarkerVisualizer(Node):
 
         self.frame_id = 'odom'
         self.stop_xy = np.array([
-            [ 64.2,  65.2,  19.0,  39.0, 1.0], #shiyakusyo
-            [100.0, 101.0,  25.0,  45.0, 1.0], #dourotan1
+            [107.0, 109.0,-255.5,-250.0, 1.0], #shiyakusyo
+            [116.0, 120.0,-465.0,-460.0, 1.0], #dourotan1
             [177.7, 178.7,  25.0,  45.0, 1.0], #dourotan2
             [257.5, 277.5, -60.0, -59.0, 1.0], #singoumaeteisisen1
             [257.5, 277.5, -66.5, -65.5, 1.0], #singoumae1

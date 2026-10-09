@@ -9,7 +9,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
-USE_SIM_TIME = False
+USE_SIM_TIME = True
 
 def generate_launch_description():
     rviz_config_dir = os.path.join(
