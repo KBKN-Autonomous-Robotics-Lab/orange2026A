@@ -195,6 +195,11 @@ class PathFollower(Node):
         self.stop_line = None
         self.start_rotation = False
 
+        # jam 判定する waypoint（各番号の jam_lookback 個前から有効）
+        self.jam_waypoints = [68, 74, 92, 97, 128, 143, 144, 198, 305,
+                            354, 358, 378, 412, 417, 434, 440]
+        self.jam_lookback = 3
+
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
         global navigation_status
@@ -417,7 +422,8 @@ class PathFollower(Node):
         #-----------------------jam process-----------------
         now = self.get_clock().now()
         if np.any(c_jam_obs):
-            if (73 <= self.waypoint_number <= 74) or (self.waypoint_number == 45) or (136 <= self.waypoint_number <= 137) or (190 <= self.waypoint_number <= 192) or (176 <= self.waypoint_number <= 176):
+            if any(wp - self.jam_lookback <= self.waypoint_number <= wp
+                for wp in self.jam_waypoints):
                 # jam条件 active でないこと none_jam_timer から 5s 経っていること）
                 if not self.jam_active:
                     none_elapsed = (now - self.none_jam_timer).nanoseconds / 1e9
