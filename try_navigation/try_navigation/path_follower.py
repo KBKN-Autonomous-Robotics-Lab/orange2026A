@@ -417,7 +417,22 @@ class PathFollower(Node):
         #-----------------------jam process-----------------
         now = self.get_clock().now()
         if np.any(c_jam_obs):
-            if (73 <= self.waypoint_number <= 74) or (self.waypoint_number == 45) or (136 <= self.waypoint_number <= 137) or (190 <= self.waypoint_number <= 192) or (176 <= self.waypoint_number <= 176):
+            if (
+                (65 <= self.waypoint_number <= 68)      # 68
+                or (71 <= self.waypoint_number <= 74)   # 74
+                or (89 <= self.waypoint_number <= 92)   # 92
+                or (94 <= self.waypoint_number <= 97)   # 97
+                or (125 <= self.waypoint_number <= 128) # 128 GPS stop
+                or (140 <= self.waypoint_number <= 144) # 143, 144
+                or (195 <= self.waypoint_number <= 198) # 198
+                or (302 <= self.waypoint_number <= 305) # 305 GPS stop
+                or (351 <= self.waypoint_number <= 358) # 354, 358
+                or (375 <= self.waypoint_number <= 378) # 378
+                or (409 <= self.waypoint_number <= 412) # 412
+                or (414 <= self.waypoint_number <= 417) # 417
+                or (431 <= self.waypoint_number <= 434) # 434
+                or (437 <= self.waypoint_number <= 440) # 440
+            ):
                 # jam条件 active でないこと none_jam_timer から 5s 経っていること）
                 if not self.jam_active:
                     none_elapsed = (now - self.none_jam_timer).nanoseconds / 1e9
