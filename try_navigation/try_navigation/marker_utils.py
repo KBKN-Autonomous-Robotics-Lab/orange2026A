@@ -7,6 +7,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 
 from nav_msgs.msg import Odometry
+from builtin_interfaces.msg import Duration
 
 class MarkerVisualizer(Node):
 
@@ -122,7 +123,7 @@ class MarkerVisualizer(Node):
         self.prev_moving = is_moving
 
 
-def create_zone_markers(range_xy, frame_id, now, ns , start_id = 0) -> MarkerArray:
+def create_zone_markers(range_xy, frame_id, now, ns , start_id = 0, line_width = 0.1, show_label=True ) -> MarkerArray:
     ma = MarkerArray()
 
     for idx, row in enumerate(range_xy):
@@ -144,15 +145,16 @@ def create_zone_markers(range_xy, frame_id, now, ns , start_id = 0) -> MarkerArr
         outline.id = base_id + 0
         outline.type = Marker.LINE_STRIP
         outline.action = Marker.ADD
-        outline.scale.x = 0.1
+        outline.pose.orientation.w = 1.0
+        outline.scale.x = float(line_width)
         if flag == 1.0:
             outline.color.r, outline.color.g, outline.color.b, outline.color.a = 1.0, 0.0, 0.0, 1.0
         else:
             outline.color.r, outline.color.g, outline.color.b, outline.color.a = 1.0, 1.0, 0.0, 1.0
-        p1 = Point(x=xmin, y=ymin, z=0.0)
-        p2 = Point(x=xmax, y=ymin, z=0.0)
-        p3 = Point(x=xmax, y=ymax, z=0.0)
-        p4 = Point(x=xmin, y=ymax, z=0.0)
+        p1 = Point(x=float(xmin), y=float(ymin), z=0.0)
+        p2 = Point(x=float(xmax), y=float(ymin), z=0.0)
+        p3 = Point(x=float(xmax), y=float(ymax), z=0.0)
+        p4 = Point(x=float(xmin), y=float(ymax), z=0.0)
         outline.points = [p1, p2, p3, p4, p1]
         ma.markers.append(outline)
 
@@ -192,7 +194,8 @@ def create_zone_markers(range_xy, frame_id, now, ns , start_id = 0) -> MarkerArr
         text.scale.z = 0.4
         text.text = f'zone_{idx} flag={int(flag)}'
         text.color.r, text.color.g, text.color.b, text.color.a = 1.0, 1.0, 1.0, 1.0
-        ma.markers.append(text)
+        if show_label:
+            ma.markers.append(text)
     return ma
 
 def create_stop_marker(pose, frame_id, now, mid) -> Marker:
@@ -213,6 +216,25 @@ def create_stop_marker(pose, frame_id, now, mid) -> Marker:
 
     # 色（半透明赤）
     m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 0.0, 0.0, 0.8
+    return m
+
+def create_target_marker(x, y, frame_id, stamp, ns, mid,
+                         rgb=(1.0, 0.0, 0.0), scale=0.15, lifetime_sec=0.3) -> Marker:
+    m = Marker()
+    m.header.frame_id = frame_id
+    m.header.stamp = stamp
+    m.ns = ns
+    m.id = mid
+    m.type = Marker.SPHERE
+    m.action = Marker.ADD
+    m.pose.position.x = float(x)
+    m.pose.position.y = float(y)
+    m.pose.orientation.w = 1.0
+    m.scale.x = m.scale.y = m.scale.z = float(scale)
+    m.color.r, m.color.g, m.color.b = rgb
+    m.color.a = 1.0
+    sec = int(lifetime_sec)
+    m.lifetime = Duration(sec=sec, nanosec=int((lifetime_sec - sec) * 1e9))
     return m
 
 def main(args=None):

@@ -18,6 +18,8 @@ from std_msgs.msg import String
 import tkinter as tk
 from threading import Thread
 from my_msgs.msg import RoadsideInfo
+from visualization_msgs.msg import MarkerArray
+from try_navigation.marker_utils import create_zone_markers, create_target_marker
 
 navigation_status = "Initializing..."
 
@@ -93,7 +95,13 @@ class PathFollower(Node):
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
         self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
         self.pcd_jam_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_jam', qos_profile) 
-        #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        self.declare_parameter('debug_marker', True)
+        self.debug_marker = self.get_parameter('debug_marker').get_parameter_value().bool_value
+        # wall follow range (x_min, x_max, y_min, y_max)
+        self.rh_range = (1.0, 1.3, -1.0, 0.0)
+        self.lh_range = (1.0, 1.3, 0.0, 1.0)
+        self.obs_frame_id = 'odom'
 
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
@@ -524,6 +532,7 @@ class PathFollower(Node):
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
+                    self.publish_wall_target(cf, cx, 'rh')
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
@@ -538,6 +547,7 @@ class PathFollower(Node):
                 cy = cf
                 cx = lh_obs_close + lh_dist
                 target_rad = math.atan2(cx, cf)
+                self.publish_wall_target(cf, cx, 'lh')
                 target_theta = (target_rad) * (180 / math.pi)
                 print("!!!LH!!!! After target_theta[deg]:",target_theta)
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
@@ -556,6 +566,7 @@ class PathFollower(Node):
                     cy = cf
                     cx = lh_obs_close + lh_dist
                     target_rad = math.atan2(cx, cf)
+                    self.publish_wall_target(cf, cx, 'lh')
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! After target_theta[deg]:",target_theta)
             
@@ -644,6 +655,22 @@ class PathFollower(Node):
         self.cmd_vel_publisher.publish(twist_msg)
         #self.get_logger().info('Publishing cmd_vel: linear.x = %f, angular.z = %f : %f deg' % (twist_msg.linear.x, twist_msg.angular.z, math.degrees(twist_msg.angular.z)))
         
+    def publish_wall_zone(self):
+        zones = np.array([[*self.rh_range, 1.0],   # RH: red
+                          [*self.lh_range, 0.0]])  # LH: yellow
+        ma = create_zone_markers(zones, self.obs_frame_id, self.t_stamp,
+                                 ns='wall_zone', line_width=0.02, show_label=False)
+        self.marker_pub.publish(ma)
+
+    def publish_wall_target(self, x, y, side):
+        if not self.debug_marker:
+            return
+        rgb, mid = ((1.0, 0.0, 0.0), 0) if side == 'rh' else ((1.0, 1.0, 0.0), 1)
+        ma = MarkerArray()
+        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, self.t_stamp,
+                                               ns='wall_target', mid=mid, rgb=rgb))
+        self.marker_pub.publish(ma)
+
     def set_target_rad(self, path, position_x, position_y, target_dist, theta_x, theta_y, theta_z):
         path_x_diff = path[0,:] - position_x
         path_y_diff = path[1,:] - position_y
@@ -765,7 +792,8 @@ class PathFollower(Node):
         return point_cloud_matrix
         
     def obs_steer(self, msg):
-        
+
+        #self.obs_frame_id = msg.header.frame_id
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
@@ -778,12 +806,12 @@ class PathFollower(Node):
         #map_obs
         self.obs_points = points
         
-        rh_obs = self.pcd_serch(points, 1.0,1.3,-1.0,0)#1.0,1.3,-0.7,0
+        rh_obs = self.pcd_serch(points, *self.rh_range)
         if len(rh_obs[0,:]) > 10:
             self.rh_obs = 1
         else:
             self.rh_obs = 0
-        lh_obs = self.pcd_serch(points, 1.0,1.3,0,1.0)#1.0,1.3,0,0.7
+        lh_obs = self.pcd_serch(points, *self.lh_range)
         if len(lh_obs[0,:]) > 10:
             self.lh_obs = 1
         else:
@@ -803,6 +831,8 @@ class PathFollower(Node):
         obs_test_msg = point_cloud_intensity_msg(ch_obs.T, t_stamp, 'odom')
         self.pcd_test_publisher.publish(obs_test_msg) 
         self.pcd_test_publisher.publish(obs_jam_msg)
+        if self.debug_marker:
+            self.publish_wall_zone()
     
     def low_obs_steer(self, msg):
         
