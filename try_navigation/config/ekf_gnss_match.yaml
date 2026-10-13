@@ -1,0 +1,87 @@
+# ekf_gnss_match のパラメータ（地図座標系の EKF：マッチング＋GNSS）
+# try_navigation.launch.py から起動（実機・bag とも。ナビの odom の既定値 = /fusion/odom_gnss_match）
+/**:
+  ros__parameters:
+    # ---- トピック ----
+    odom_topic: /odom/combine            # 予測
+    match_topic: /odom_ekf_match         # マッチング（/odom_ref_slam にも切り替え可。遅れ補正なし）
+    ref_slam_topic: /odom_ref_slam       # マッチング成功の時刻（match_r_inflate 用）
+    gnss_topic: /odom/UM982              # cov[0]=衛星数, cov[7]=σ²
+    gnss_raw_topic: /gps_raw             # pos_type 用（BESTNAVA → 無ければ GGA quality）
+    occ_topic: /occlusion_rate           # r_mode=occ のとき（std_msgs/Float32）
+    waypoint_topic: /waypoint_number     # GNSS 無効区間（ウェイポイント番号）
+    output_topic: /fusion/odom_gnss_match
+    frame_id: odom
+    child_frame_id: base_footprint
+    publish_tf: false                    # 既存の TF と二重にならないよう既定はオフ
+    use_pos_type: true
+    status_log_sec: 5.0
+
+    # ---- 使う観測（研究の比較もここで切り替え）----
+    use_gnss: true
+    use_slam: true
+    use_gnss_heading: true               # GNSS 方位とのずれ（中央値）で方位を補正
+    use_bias: false                      # GNSS のずれ [bx, by] を推定（場所でずれが変わるとき）
+    r_mode: cov7                         # fixed / cov7 / occ
+
+    # ---- 予測（/odom/combine）----
+    odom_scale: 1.0
+    odom_jump_thresh: 1.0                # [m/回] これを超える移動は予測しない
+    q_dist_ratio: 0.05                   # 1回の移動量に比例するσ
+    q_dist_rw: 0.05                      # [m/sqrt(m)] 100m で約0.5m
+    q_pos_time: 0.01                     # [m/sqrt(s)]
+    q_yaw_ratio: 0.02                    # 旋回角に比例するσ
+    q_yaw_time: 0.001                    # [rad/sqrt(s)]
+    q_bias_dist: 0.01                    # [m/sqrt(m)]
+    q_bias_time: 0.001                   # [m/sqrt(s)]
+    init_pos_sigma: 1.0
+    init_yaw_sigma_deg: 1.0
+    init_bias_sigma: 1.0
+
+    # ---- マッチング ----
+    match_sigma: 0.2                     # R_match = 0.2²（ekf_match は combine と融合済みなので大きめ）
+    match_gate_chi2: 13.8                # 自由度2・99.9%（0 以下で検定なし）
+    match_reaccept_count: 30             # 連続で除外したら受け入れ直す（GNSS 使用中は待つ）
+    match_r_inflate: false               # 最後の /odom_ref_slam からの経過時間で R_match を大きくする
+    match_sigma_growth: 0.05             # [m/s]
+    match_sigma_max: 2.0
+    match_inflate_grace: 1.0             # [s]
+
+    # ---- GNSS ----
+    gnss_sigma_min: 0.05                 # R = max(σ², 下限²)
+    gnss_sigma_fixed: 0.17               # r_mode=fixed
+    gnss_sigma_fix: 0.05                 # 種類ごとのσの下限（σ が無いときはこの値）
+    gnss_sigma_float: 0.5                # Float の σ は楽観的 → RTK が外れたらマッチングが主役
+    gnss_sigma_ppp: 0.2
+    gnss_sigma_unknown: 0.17             # 種類も σ も分からないとき（旧EKFの値）
+    # 種類（FIX/FLOAT/PPP/PPP_CONV/DGPS/SINGLE/NONE/UNKNOWN）か pos_type 名（NARROW_INT など）
+    gnss_accept_types: [FIX, FLOAT, PPP, UNKNOWN]   # UNKNOWN = pos_type が読めないとき
+    gnss_raw_timeout: 0.5
+    gnss_gate_chi2: 13.8
+    gnss_reaccept_count: 30
+    gnss_reaccept_sigma_max: 0.1         # 受け入れ直すのは σ がこれ以下（≒ RTK Fix）のときだけ
+    gnss_antenna_x: 0.0                  # アンテナ位置（前方+）[m]。地図は補正なしで作っているので既定 0
+    gnss_antenna_y: 0.0                  # （左+）[m]
+    occ_a: 0.05                          # r_mode=occ: σ = clamp(a + b*occ)（仮値・要較正）
+    occ_b: 1.0
+    occ_sigma_min: 0.05
+    occ_sigma_max: 5.0
+    occ_timeout: 1.0
+
+    # ---- 受け入れ直し（共通）----
+    reaccept_spread: 0.3                 # 除外中のイノベーションのばらつきの上限 [m]
+    reaccept_block_sec: 2.0
+
+    # ---- 方位のずれ（GNSS 方位 − combine 方位）----
+    heading_accept_types: [FIX]          # NARROW_INT だけにするなら [NARROW_INT]
+    heading_sigma_max: 0.05
+    heading_min_sats: 4                  # pos_type が読めないときの代わり（旧条件）
+    heading_samples: 100                 # 10Hz で約10秒
+    heading_straight_deg: 40.0           # 旧EKFと同じ
+    heading_reset_sec: 2.0
+
+    # ---- GNSS 無効区間（運用の保険）----
+    # 既定は旧EKF（ekf_myself_gps）のつくば2026と同じ範囲。オフにするときは行頭に # を付ける
+    # （空のリスト [] は書かない。読み込みエラーになる）。推定位置で判定するので境界は余裕を取る
+    gnss_off_rects: [40.0, 118.0, -50.0, 88.0]       # [xmin, xmax, ymin, ymax, ...]
+    # gnss_off_waypoints: [10, 15]                   # [start, end, ...]（両端を含む）
