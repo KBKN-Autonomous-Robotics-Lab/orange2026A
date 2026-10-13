@@ -20,6 +20,7 @@ from threading import Thread
 from my_msgs.msg import RoadsideInfo
 from visualization_msgs.msg import MarkerArray
 from try_navigation.marker_utils import create_zone_markers, create_target_marker
+from builtin_interfaces.msg import Time
 
 navigation_status = "Initializing..."
 
@@ -658,7 +659,7 @@ class PathFollower(Node):
     def publish_wall_zone(self):
         zones = np.array([[*self.rh_range, 1.0],   # RH: red
                           [*self.lh_range, 0.0]])  # LH: yellow
-        ma = create_zone_markers(zones, self.obs_frame_id, self.t_stamp,
+        ma = create_zone_markers(zones, self.obs_frame_id, Time(),
                                  ns='wall_zone', line_width=0.02, show_label=False)
         self.marker_pub.publish(ma)
 
@@ -667,7 +668,7 @@ class PathFollower(Node):
             return
         rgb, mid = ((1.0, 0.0, 0.0), 0) if side == 'rh' else ((1.0, 1.0, 0.0), 1)
         ma = MarkerArray()
-        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, self.t_stamp,
+        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, Time(),
                                                ns='wall_target', mid=mid, rgb=rgb))
         self.marker_pub.publish(ma)
 
@@ -793,7 +794,7 @@ class PathFollower(Node):
         
     def obs_steer(self, msg):
 
-        #self.obs_frame_id = msg.header.frame_id
+        self.obs_frame_id = msg.header.frame_id
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
