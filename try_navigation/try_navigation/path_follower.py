@@ -102,6 +102,8 @@ class PathFollower(Node):
         # wall follow range (x_min, x_max, y_min, y_max)
         self.rh_range = (1.0, 1.3, -1.0, 0.0)
         self.lh_range = (1.0, 1.3, 0.0, 1.0)
+        self.rh_range_wide = (1.0, 1.3, -1.5, 0.0)
+        self.lh_range_wide = (1.0, 1.3, 0.0, 1.5)
         self.obs_frame_id = 'odom'
 
         #パラメータ init
@@ -661,6 +663,12 @@ class PathFollower(Node):
                           [*self.lh_range, 0.0]])  # LH: yellow
         ma = create_zone_markers(zones, self.obs_frame_id, Time(),
                                  ns='wall_zone', line_width=0.02, show_label=False)
+        #self.marker_pub.publish(ma)
+        wide_zones = np.array([[*self.rh_range_wide, 1.0],   # RH wide: red
+                               [*self.lh_range_wide, 0.0]])  # LH wide: yellow
+        ma_wide = create_zone_markers(wide_zones, self.obs_frame_id, Time(),
+                                      ns='wall_zone_wide', line_width=0.01, show_label=False)
+        ma.markers.extend(ma_wide.markers)
         self.marker_pub.publish(ma)
 
     def publish_wall_target(self, x, y, side):
