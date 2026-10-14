@@ -1,5 +1,7 @@
 # ekf_gnss_match のパラメータ（地図座標系の EKF：マッチング＋GNSS）
 # try_navigation.launch.py から起動（実機・bag とも。ナビの odom の既定値 = /fusion/odom_gnss_match）
+# 単体: ros2 run try_navigation ekf_gnss_match --ros-args -p use_sim_time:=true（このファイルは自動で読まれる）
+# 変更したら colcon build（インストール先のファイルが読まれるため）
 /**:
   ros__parameters:
     # ---- トピック ----
@@ -13,7 +15,7 @@
     output_topic: /fusion/odom_gnss_match
     frame_id: odom
     child_frame_id: base_footprint
-    publish_tf: false                    # 既存の TF と二重にならないよう既定はオフ
+    ekf_publish_TF: false                # 旧と同じ名前。combine の TF と二重にならないよう既定はオフ
     use_pos_type: true
     status_log_sec: 5.0
 
@@ -25,7 +27,7 @@
     r_mode: cov7                         # fixed / cov7 / occ
 
     # ---- 予測（/odom/combine）----
-    odom_scale: 1.0
+    kalf_speed_param: 1.0                # 移動量の倍率（旧と同じ名前。旧は GPS あり 1.05 / なし 1.00）
     odom_jump_thresh: 1.0                # [m/回] これを超える移動は予測しない
     q_dist_ratio: 0.05                   # 1回の移動量に比例するσ
     q_dist_rw: 0.05                      # [m/sqrt(m)] 100m で約0.5m
@@ -75,9 +77,9 @@
     # ---- 方位のずれ（GNSS 方位 − combine 方位）----
     heading_accept_types: [FIX]          # NARROW_INT だけにするなら [NARROW_INT]
     heading_sigma_max: 0.05
-    heading_min_sats: 4                  # pos_type が読めないときの代わり（旧条件）
-    heading_samples: 100                 # 10Hz で約10秒
-    heading_straight_deg: 40.0           # 旧EKFと同じ
+    set_yaw_satellites_no: 4             # 旧と同じ名前。pos_type が読めないときの代わり（旧の条件）
+    set_yaw_count: 100                   # 旧と同じ名前。この数たまったら更新（10Hz で約10秒）
+    theta_diff_thresh: 40.0              # 旧と同じ名前。これ以上曲がったらサンプルを捨てる [deg]
     heading_reset_sec: 2.0
 
     # ---- GNSS 無効区間（運用の保険）----
