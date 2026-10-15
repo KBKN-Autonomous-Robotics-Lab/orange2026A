@@ -533,6 +533,8 @@ class PathFollower(Node):
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
                     rh_dist = 0.65 # 0.65
+                    if (290 <= self.waypoint_number <= 304) or (311 <= self.waypoint_number <= 314):
+                        rh_dist = 1.00
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
@@ -567,6 +569,8 @@ class PathFollower(Node):
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                     lh_dist = -0.65 # 0.65
+                    if (188 <= self.waypoint_number <= 195) or (203 <= self.waypoint_number <= 240):
+                        lh_dist = -1.00
                     cy = cf
                     cx = lh_obs_close + lh_dist
                     target_rad = math.atan2(cx, cf)
@@ -819,13 +823,27 @@ class PathFollower(Node):
         
         #map_obs
         self.obs_points = points
-        
-        rh_obs = self.pcd_serch(points, *self.rh_range)
+
+        # 例外：壁から離して走る区間は横方向の認識範囲を広げる
+        rh_range = self.rh_range
+        lh_range = self.lh_range
+        if (
+            (290 <= self.waypoint_number <= 304 and (-30 <= self.theta_z <= 30))
+            or (311 <= self.waypoint_number <= 314 and (-30 <= self.theta_z <= 30))
+        ):
+            rh_range = self.rh_range_wide
+        if (
+            (188 <= self.waypoint_number <= 195 and ((-180 <= self.theta_z <= -150) or (150 <= self.theta_z <= 180)))
+            or (203 <= self.waypoint_number <= 240 and ((-180 <= self.theta_z <= -150) or (150 <= self.theta_z <= 180)))
+        ):
+            lh_range = self.lh_range_wide
+
+        rh_obs = self.pcd_serch(points, *rh_range)
         if len(rh_obs[0,:]) > 10:
             self.rh_obs = 1
         else:
             self.rh_obs = 0
-        lh_obs = self.pcd_serch(points, *self.lh_range)
+        lh_obs = self.pcd_serch(points, *lh_range)
         if len(lh_obs[0,:]) > 10:
             self.lh_obs = 1
         else:
