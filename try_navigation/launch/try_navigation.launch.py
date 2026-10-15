@@ -27,7 +27,7 @@ def generate_launch_description():
     odom = LaunchConfiguration('odom')
     declare_odom_arg = DeclareLaunchArgument(
         'odom',
-        default_value='/odom_ekf_match', # odom_ekf_match
+        default_value='/fusion/odom_gnss_match', # odom_ekf_match
         description='Odometry topic name'
     )
     
@@ -98,6 +98,15 @@ def generate_launch_description():
         Node(package='try_navigation',
             executable='ekf_myself_gps',
             name='sensor_fusion',
+            output='screen',
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
+            arguments=[]
+        ),
+
+        #gnss match ekf
+        Node(package='try_navigation',
+            executable='ekf_gnss_match',
+            name='ekf_gnss_match',
             output='screen',
             parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]
