@@ -105,6 +105,7 @@ class PathFollower(Node):
         self.rh_range_wide = (1.0, 1.3, -1.5, 0.0)
         self.lh_range_wide = (1.0, 1.3, 0.0, 1.5)
         self.obs_frame_id = 'odom'
+        self.trail_id = 0
 
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
@@ -678,6 +679,10 @@ class PathFollower(Node):
         ma = MarkerArray()
         ma.markers.append(create_target_marker(x, y, self.obs_frame_id, Time(),
                                                ns='wall_target', mid=mid, rgb=rgb))
+        # 軌跡用：IDを毎回変えて点を残す
+        self.trail_id += 1
+        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, Time(),
+                                               ns='wall_target_trail', mid=self.trail_id, rgb=rgb, lifetime_sec=0.0))
         self.marker_pub.publish(ma)
 
     def set_target_rad(self, path, position_x, position_y, target_dist, theta_x, theta_y, theta_z):
