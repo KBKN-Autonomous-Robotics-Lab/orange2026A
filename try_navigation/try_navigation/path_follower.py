@@ -533,7 +533,10 @@ class PathFollower(Node):
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
                     rh_dist = 0.65 # 0.65
-                    if (290 <= self.waypoint_number <= 304) or (311 <= self.waypoint_number <= 314):
+                    if (
+                        ((290 <= self.waypoint_number <= 304) and (-30 <= theta_z <= 30)) 
+                        or ((311 <= self.waypoint_number <= 314) and (-30 <= theta_z <= 30))
+                    ):
                         rh_dist = 1.00
                     cy = cf
                     cx = rh_obs_close + rh_dist
@@ -569,7 +572,10 @@ class PathFollower(Node):
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                     lh_dist = -0.65 # 0.65
-                    if (188 <= self.waypoint_number <= 195) or (203 <= self.waypoint_number <= 240):
+                    if (
+                        ((188 <= self.waypoint_number <= 195) and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180))) 
+                        or ((203 <= self.waypoint_number <= 240) and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    ):
                         lh_dist = -1.00
                     cy = cf
                     cx = lh_obs_close + lh_dist
@@ -827,15 +833,10 @@ class PathFollower(Node):
         # 例外：壁から離して走る区間は横方向の認識範囲を広げる
         rh_range = self.rh_range
         lh_range = self.lh_range
-        if (
-            (290 <= self.waypoint_number <= 304 and (-30 <= self.theta_z <= 30))
-            or (311 <= self.waypoint_number <= 314 and (-30 <= self.theta_z <= 30))
-        ):
+        #rh 290-304 311-314  -30< <30
+        #lh 188-195 203-240  -180< <-150 and 150< < 180
+        if (188 <= self.waypoint_number <= 320):
             rh_range = self.rh_range_wide
-        if (
-            (188 <= self.waypoint_number <= 195 and ((-180 <= self.theta_z <= -150) or (150 <= self.theta_z <= 180)))
-            or (203 <= self.waypoint_number <= 240 and ((-180 <= self.theta_z <= -150) or (150 <= self.theta_z <= 180)))
-        ):
             lh_range = self.lh_range_wide
 
         rh_obs = self.pcd_serch(points, *rh_range)
