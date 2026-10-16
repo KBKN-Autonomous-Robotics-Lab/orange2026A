@@ -18,6 +18,9 @@ from std_msgs.msg import String
 import tkinter as tk
 from threading import Thread
 from my_msgs.msg import RoadsideInfo
+from visualization_msgs.msg import MarkerArray
+from try_navigation.marker_utils import create_zone_markers, create_target_marker
+from builtin_interfaces.msg import Time
 
 navigation_status = "Initializing..."
 
@@ -93,7 +96,16 @@ class PathFollower(Node):
         self.cmd_vel_publisher = self.create_publisher(geometry_msgs.Twist, 'cmd_vel', qos_profile) #set publish pcd topic name
         self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
         self.pcd_jam_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_jam', qos_profile) 
-        #self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        self.declare_parameter('debug_marker', True)
+        self.debug_marker = self.get_parameter('debug_marker').get_parameter_value().bool_value
+        # wall follow range (x_min, x_max, y_min, y_max)
+        self.rh_range = (1.0, 1.3, -1.0, 0.0)
+        self.lh_range = (1.0, 1.3, 0.0, 1.0)
+        self.rh_range_wide = (1.0, 1.3, -1.5, 0.0)
+        self.lh_range_wide = (1.0, 1.3, 0.0, 1.5)
+        self.obs_frame_id = 'odom'
+        self.trail_id = 0
 
         #パラメータ init
         self.path_plan = np.array([[0],[0],[0]])
@@ -521,9 +533,15 @@ class PathFollower(Node):
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
                     rh_dist = 0.65 # 0.65
+                    if (
+                        ((290 <= self.waypoint_number <= 304) and (-30 <= theta_z <= 30)) 
+                        or ((311 <= self.waypoint_number <= 314) and (-30 <= theta_z <= 30))
+                    ):
+                        rh_dist = 1.00
                     cy = cf
                     cx = rh_obs_close + rh_dist
                     target_rad = math.atan2(cx, cf)
+                    self.publish_wall_target(cf, cx, 'rh')
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! After target_theta[deg]:",target_theta)
                     
@@ -538,6 +556,7 @@ class PathFollower(Node):
                 cy = cf
                 cx = lh_obs_close + lh_dist
                 target_rad = math.atan2(cx, cf)
+                self.publish_wall_target(cf, cx, 'lh')
                 target_theta = (target_rad) * (180 / math.pi)
                 print("!!!LH!!!! After target_theta[deg]:",target_theta)
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
@@ -553,9 +572,15 @@ class PathFollower(Node):
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                     lh_dist = -0.65 # 0.65
+                    if (
+                        ((188 <= self.waypoint_number <= 195) and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180))) 
+                        or ((203 <= self.waypoint_number <= 240) and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    ):
+                        lh_dist = -1.00
                     cy = cf
                     cx = lh_obs_close + lh_dist
                     target_rad = math.atan2(cx, cf)
+                    self.publish_wall_target(cf, cx, 'lh')
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! After target_theta[deg]:",target_theta)
             
@@ -644,6 +669,32 @@ class PathFollower(Node):
         self.cmd_vel_publisher.publish(twist_msg)
         #self.get_logger().info('Publishing cmd_vel: linear.x = %f, angular.z = %f : %f deg' % (twist_msg.linear.x, twist_msg.angular.z, math.degrees(twist_msg.angular.z)))
         
+    def publish_wall_zone(self):
+        zones = np.array([[*self.rh_range, 1.0],   # RH: red
+                          [*self.lh_range, 0.0]])  # LH: yellow
+        ma = create_zone_markers(zones, self.obs_frame_id, Time(),
+                                 ns='wall_zone', line_width=0.02, show_label=False)
+        #self.marker_pub.publish(ma)
+        wide_zones = np.array([[*self.rh_range_wide, 1.0],   # RH wide: red
+                               [*self.lh_range_wide, 0.0]])  # LH wide: yellow
+        ma_wide = create_zone_markers(wide_zones, self.obs_frame_id, Time(),
+                                      ns='wall_zone_wide', line_width=0.01, show_label=False)
+        ma.markers.extend(ma_wide.markers)
+        self.marker_pub.publish(ma)
+
+    def publish_wall_target(self, x, y, side):
+        if not self.debug_marker:
+            return
+        rgb, mid = ((1.0, 0.0, 0.0), 0) if side == 'rh' else ((1.0, 1.0, 0.0), 1)
+        ma = MarkerArray()
+        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, Time(),
+                                               ns='wall_target', mid=mid, rgb=rgb))
+        # 軌跡用：IDを毎回変えて点を残す
+        self.trail_id += 1
+        ma.markers.append(create_target_marker(x, y, self.obs_frame_id, Time(),
+                                               ns='wall_target_trail', mid=self.trail_id, rgb=rgb, lifetime_sec=0.0))
+        self.marker_pub.publish(ma)
+
     def set_target_rad(self, path, position_x, position_y, target_dist, theta_x, theta_y, theta_z):
         path_x_diff = path[0,:] - position_x
         path_y_diff = path[1,:] - position_y
@@ -765,7 +816,8 @@ class PathFollower(Node):
         return point_cloud_matrix
         
     def obs_steer(self, msg):
-        
+
+        self.obs_frame_id = msg.header.frame_id
         #print stamp message
         t_stamp = msg.header.stamp
         #print(f"t_stamp ={t_stamp}")
@@ -777,13 +829,22 @@ class PathFollower(Node):
         
         #map_obs
         self.obs_points = points
-        
-        rh_obs = self.pcd_serch(points, 1.0,1.3,-1.0,0)#1.0,1.3,-0.7,0
+
+        # 例外：壁から離して走る区間は横方向の認識範囲を広げる
+        rh_range = self.rh_range
+        lh_range = self.lh_range
+        #rh 290-304 311-314  -30< <30
+        #lh 188-195 203-240  -180< <-150 and 150< < 180
+        if (188 <= self.waypoint_number <= 320):
+            rh_range = self.rh_range_wide
+            lh_range = self.lh_range_wide
+
+        rh_obs = self.pcd_serch(points, *rh_range)
         if len(rh_obs[0,:]) > 10:
             self.rh_obs = 1
         else:
             self.rh_obs = 0
-        lh_obs = self.pcd_serch(points, 1.0,1.3,0,1.0)#1.0,1.3,0,0.7
+        lh_obs = self.pcd_serch(points, *lh_range)
         if len(lh_obs[0,:]) > 10:
             self.lh_obs = 1
         else:
@@ -803,6 +864,8 @@ class PathFollower(Node):
         obs_test_msg = point_cloud_intensity_msg(ch_obs.T, t_stamp, 'odom')
         self.pcd_test_publisher.publish(obs_test_msg) 
         self.pcd_test_publisher.publish(obs_jam_msg)
+        if self.debug_marker:
+            self.publish_wall_zone()
     
     def low_obs_steer(self, msg):
         
