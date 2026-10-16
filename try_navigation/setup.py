@@ -62,7 +62,8 @@ setup(
             'marker_utils = try_navigation.marker_utils:main',
             'pcd_buffer = try_navigation.pcd_buffer:main',
             'roadside_follow = try_navigation.roadside_follow:main',
-            'intensity_inspector = try_navigation.intensity_inspector:main'
+            'intensity_inspector = try_navigation.intensity_inspector:main',
+            'ekf_gnss_match = try_navigation.ekf_gnss_match:main',
         ],
     },
 )
