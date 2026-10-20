@@ -148,8 +148,8 @@ class PathFollower(Node):
         
         self.stop_xy = np.array([ 
             #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
-            [107.0, 109.0,-255.5,-250.0, 1.0, 0.0,  0.0], #nakaniwa test
-            [116.0, 120.0,-465.0,-460.0, 1.0, 0.0, -2.0], #nakaniwa test2 305
+            [107.0, 109.0,-255.5,-250.0, 1.0, 1.0,  0.0], #nakaniwa test
+            [116.0, 120.0,-465.0,-460.0, 1.0, 1.0, -2.0], #nakaniwa test2 305
             [ 56.1,  76.1, -18.0, -17.0, 1.0, 1.0,  0.0], #shiyakusyo 1 tsukuba2026
             [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
             [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
@@ -221,7 +221,8 @@ class PathFollower(Node):
         else:
             navigation_status = "STOP"
             self.target_yaw = float(goal_handle.request.b)
-            self.rotation_flag = 1
+            if (197 <= self.waypoint_number <= 199) or (304 <= self.waypoint_number <= 306):
+                self.rotation_flag = 1
         
         # フィードバックの返信
         for i in range(1):
@@ -316,7 +317,7 @@ class PathFollower(Node):
 
         
         ################### Straight Waypoint ############################
-        if 191 <= self.waypoint_number <= 192:# or 0 <= self.waypoint_number <= 5:
+        if (69 <= self.waypoint_number <= 70) or (75 <= self.waypoint_number <= 77) or (146 <= self.waypoint_number <= 148) or (198 <= self.waypoint_number <= 200) or (358 <= self.waypoint_number <= 361):# or 0 <= self.waypoint_number <= 5:
             target_waypoint = path[:,-1]
             relative_point_x = target_waypoint[0] - position_x
             relative_point_y = target_waypoint[1] - position_y
@@ -432,18 +433,18 @@ class PathFollower(Node):
             if (
                 (65 <= self.waypoint_number <= 68)      # 68
                 or (71 <= self.waypoint_number <= 74)   # 74
-                or (89 <= self.waypoint_number <= 92)   # 92
-                or (94 <= self.waypoint_number <= 97)   # 97
-                or (125 <= self.waypoint_number <= 128) # 128 GPS stop
-                or (140 <= self.waypoint_number <= 144) # 143, 144
-                or (195 <= self.waypoint_number <= 198) # 198
-                or (302 <= self.waypoint_number <= 305) # 305 GPS stop
-                or (351 <= self.waypoint_number <= 358) # 354, 358
-                or (375 <= self.waypoint_number <= 378) # 378
-                or (409 <= self.waypoint_number <= 412) # 412
-                or (414 <= self.waypoint_number <= 417) # 417
-                or (431 <= self.waypoint_number <= 434) # 434
-                or (437 <= self.waypoint_number <= 440) # 440
+                or (92 <= self.waypoint_number <= 92)   # 92
+                or (97 <= self.waypoint_number <= 97)   # 97
+                or (127 <= self.waypoint_number <= 128) # 128 GPS stop
+                or (143 <= self.waypoint_number <= 144) # 143, 144
+                or (197 <= self.waypoint_number <= 198) # 198
+                or (304 <= self.waypoint_number <= 305) # 305 GPS stop
+                or (350 <= self.waypoint_number <= 350) # 354, 358
+                or (377 <= self.waypoint_number <= 378) # 378
+                or (411 <= self.waypoint_number <= 412) # 412
+                or (416 <= self.waypoint_number <= 417) # 417
+                or (433 <= self.waypoint_number <= 434) # 434
+                or (439 <= self.waypoint_number <= 440) # 440
             ):
                 # jam条件 active でないこと none_jam_timer から 5s 経っていること）
                 if not self.jam_active:
@@ -609,8 +610,11 @@ class PathFollower(Node):
             speed = 0.10     
         
         # down speed for stop waypoint
-        if (68 <= self.waypoint_number <= 68) or (self.waypoint_number == 74):
+        if (68 <= self.waypoint_number <= 68) or (self.waypoint_number == 74) or (self.waypoint_number == 92) or (self.waypoint_number == 97) or (self.waypoint_number == 128) or (self.waypoint_number == 143) or (self.waypoint_number == 144) or (self.waypoint_number == 198) or (self.waypoint_number == 305) or (self.waypoint_number == 354) or (self.waypoint_number == 358) or (self.waypoint_number == 378) or (self.waypoint_number == 412) or (self.waypoint_number == 417) or (self.waypoint_number == 434) or (self.waypoint_number == 440):
             speed = 0.20
+        # up speed for crossing waypoint
+        elif (145 <= self.waypoint_number <= 149) or (359 <= self.waypoint_number <= 362):
+            speed = 0.70
         
         #elif abs(target_theta)  > 90:
         #    speed = 0.2
@@ -649,7 +653,7 @@ class PathFollower(Node):
                 yaw_error += 360
             yaw_error_rad = math.radians(yaw_error)
             yaw_error_rad_pd = self.yaw_sensim0(yaw_error_rad)
-            if abs(yaw_error) > 5: # [deg]
+            if abs(yaw_error) > 10: # [deg]
                 twist_msg.linear.x = 0.0  # 前進速度 (m/s)
                 twist_msg.angular.z = yaw_error_rad_pd  # 角速度 (rad/s)
                 #if yaw_error > 0:

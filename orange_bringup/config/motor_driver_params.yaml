@@ -19,10 +19,10 @@ motor_driver_node:
     callback_timeout: 0.5 # seconds
 
     # Time to reach target position
-    set_accel_time_left: 500 # ms
-    set_accel_time_right: 500 # ms
-    set_decel_time_left: 500 # ms
-    set_decel_time_right: 500 # ms
+    set_accel_time_left: 0 # ms
+    set_accel_time_right: 0 # ms
+    set_decel_time_left: 0 # ms
+    set_decel_time_right: 0 # ms
 
     # Maximum rpm
     max_left_rpm: 160

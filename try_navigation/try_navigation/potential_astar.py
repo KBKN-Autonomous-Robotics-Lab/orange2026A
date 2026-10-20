@@ -81,7 +81,7 @@ class PotentialAStar(Node):
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/map_obs', self.get_map_obs, qos_profile)
         #self.pothole_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pothole_points', self.get_pot_obs, qos_profile)
         #self.tire_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/tire_points', self.get_tire_obs, qos_profile)
-        self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/white_buff', self.get_white_obs, qos_profile)
+        self.white_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_segment_shibafu', self.get_white_obs, qos_profile)
         self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_right', self.get_right_obs, qos_profile)
         self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_left', self.get_left_obs, qos_profile)
         self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dotted_line', self.get_dot_obs, qos_profile)
@@ -415,11 +415,15 @@ class PotentialAStar(Node):
         #white_obs add(global)
         white_line_local = np.array([[],[],[]])
         if len(self.white_obs_points[0,:])>0: 
+            if (150 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
+                white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            '''
             if self.functions_test == 1:
                 if self.waypoint_number >= self.white_number: # front stop >= 1, lanechange == 0
                     white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
             elif self.obs_info[self.waypoint_number][self.whiteline_info] == 1:
                 white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+            '''
         
         #right_obs add(global)
         right_line_local = np.array([[],[],[]])
@@ -571,6 +575,8 @@ class PotentialAStar(Node):
         cg=self.cg
         lo=self.lo
         co=self.co
+        if (150 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
+            lo=self.lo2nd
 
         #relative waypoint
         relative_wp_x = self.waypoint[0] - self.position_x
