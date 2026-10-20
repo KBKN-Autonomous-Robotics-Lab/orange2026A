@@ -431,18 +431,18 @@ class PathFollower(Node):
         now = self.get_clock().now()
         if np.any(c_jam_obs):
             if (
-                (65 <= self.waypoint_number <= 68)      # 68
-                or (71 <= self.waypoint_number <= 74)   # 74
-                or (92 <= self.waypoint_number <= 92)   # 92
-                or (97 <= self.waypoint_number <= 97)   # 97
+                (66 <= self.waypoint_number <= 68)      # 68
+                or (72 <= self.waypoint_number <= 74)   # 74
+                #or (92 <= self.waypoint_number <= 92)   # 92
+                #or (97 <= self.waypoint_number <= 97)   # 97
                 or (127 <= self.waypoint_number <= 128) # 128 GPS stop
-                or (143 <= self.waypoint_number <= 144) # 143, 144
-                or (197 <= self.waypoint_number <= 198) # 198
-                or (304 <= self.waypoint_number <= 305) # 305 GPS stop
-                or (350 <= self.waypoint_number <= 350) # 354, 358
+                or (141 <= self.waypoint_number <= 143) # 143, 144
+                #or (197 <= self.waypoint_number <= 198) # 198
+                #or (304 <= self.waypoint_number <= 305) # 305 GPS stop
+                or (353 <= self.waypoint_number <= 354) # 354, 358
                 or (377 <= self.waypoint_number <= 378) # 378
-                or (411 <= self.waypoint_number <= 412) # 412
-                or (416 <= self.waypoint_number <= 417) # 417
+                #or (411 <= self.waypoint_number <= 412) # 412
+                #or (416 <= self.waypoint_number <= 417) # 417
                 or (433 <= self.waypoint_number <= 434) # 434
                 or (439 <= self.waypoint_number <= 440) # 440
             ):
@@ -467,7 +467,7 @@ class PathFollower(Node):
                         print(f"time: {sec} sec")
 
                     # stop before 20 sec passed
-                    if elapsed <= 50.0:
+                    if elapsed <= 10.0:
                         speed = 0.0
                         target_rad = 0.0
                         return
