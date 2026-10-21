@@ -31,7 +31,7 @@ class PcdReflectSegmentation(Node):
         )
         
         # Subscriptionを作成。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation', self.pcd_reflect_segmentation, qos_profile) #set subscribe pcd topic name
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation_merge', self.pcd_reflect_segmentation, qos_profile) #set subscribe pcd topic name
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
@@ -158,12 +158,12 @@ class PcdReflectSegmentation(Node):
         return pcd_ind
         
     def pcd_mask(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ) ))
         pcd_mask = pointcloud[:, ~pcd_ind]
         return pcd_mask
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ) ))
         pcd_mask = pointcloud[:, pcd_ind]
         return pcd_mask
         

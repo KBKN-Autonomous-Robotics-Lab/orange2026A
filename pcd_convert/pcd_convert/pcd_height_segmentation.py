@@ -110,7 +110,7 @@ class PcdHeightSegmentation(Node):
         print(f"points ={points.shape}")
         
         #obs segment
-        if (23 <= self.waypoint_number <= 24) or (280 <= self.waypoint_number <= 281):
+        if (23 <= self.waypoint_number <= 24) or (145 <= self.waypoint_number <= 148) or (198 <= self.waypoint_number <= 200) or (280 <= self.waypoint_number <= 281) or (306 <= self.waypoint_number <= 308) or (358 <= self.waypoint_number <= 361):
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN_SLOPE, self.OBS_HIGHT_MAX)
         else:
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX)
@@ -163,12 +163,12 @@ class PcdHeightSegmentation(Node):
         return pcd_segment
         
     def pcd_mask(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max )) )
         pcd_mask = pointcloud[:, ~pcd_ind]
         return pcd_mask
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ) ))
         pcd_mask = pointcloud[:, pcd_ind]
         return pcd_mask
         
