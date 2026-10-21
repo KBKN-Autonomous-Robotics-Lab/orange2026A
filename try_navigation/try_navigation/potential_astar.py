@@ -416,7 +416,8 @@ class PotentialAStar(Node):
         white_line_local = np.array([[],[],[]])
         if len(self.white_obs_points[0,:])>0: 
             if (150 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
-                white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+                #white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
+                white_line_local = self.white_obs_points
             '''
             if self.functions_test == 1:
                 if self.waypoint_number >= self.white_number: # front stop >= 1, lanechange == 0

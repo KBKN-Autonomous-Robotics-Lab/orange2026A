@@ -158,12 +158,12 @@ class PcdReflectSegmentation(Node):
         return pcd_ind
         
     def pcd_mask(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ) ))
         pcd_mask = pointcloud[:, ~pcd_ind]
         return pcd_mask
         
     def pcd_serch(self, pointcloud, x_min, x_max, y_min, y_max):
-        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:]) <= y_max ) )
+        pcd_ind = (( (x_min <= pointcloud[0,:]) * (pointcloud[0,:] <= x_max)) * ((y_min <= pointcloud[1,:]) * (pointcloud[1,:] <= y_max ) ))
         pcd_mask = pointcloud[:, pcd_ind]
         return pcd_mask
         
