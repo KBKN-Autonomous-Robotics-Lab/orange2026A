@@ -12,7 +12,7 @@ class MovingBaseNode(Node):
         super().__init__('movingbase')
         self.HEADER = 6
         self.count = 0
-        self.first_heading = 0
+        self.first_heading = 0.0
 
         self.declare_parameter('port', '/dev/sensors/GNSSrover')
         self.declare_parameter('baud', 9600)
@@ -142,10 +142,10 @@ class MovingBaseNode(Node):
 
             if self.count == 0:
                 self.get_logger().info(f"!!!----------robotheading: {heading} deg----------!!!")
-                self.first_heading = heading
+              #  self.first_heading = heading
                 self.count = 1
 
-            relative_heading = heading - self.first_heading
+            relative_heading = heading
             if relative_heading < 0:
                 relative_heading += 360
 

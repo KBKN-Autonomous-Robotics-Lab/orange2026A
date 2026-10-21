@@ -32,7 +32,7 @@ def generate_launch_description():
     waypoint_path = LaunchConfiguration('waypoint_path')
     declare_waypoint_arg = DeclareLaunchArgument(
         'waypoint_path',
-        default_value='kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml',
+        default_value='kbkn_maps/waypoints/hosei/2026/nakaniwa.yaml',
         description='waypoint name'
     )
     #kbkn_maps/waypoints/tsukuba/2025/papa/tsukuba_waypoint.yaml
@@ -129,15 +129,15 @@ def generate_launch_description():
         
         #waypoint manager
         # waypoint gps command
-        #Node(package='navigation_control',
-        #    executable='gps_waypoint',
-        #    name='gps_waypoint',
-        #    output='screen',
-        #    parameters=[{'odom': odom},
-        #                {'waypoint_path': waypoint_path},
-        #                {'waypoint_start_index': waypoint_start_index}],
-        #    arguments=[],
-        #),
+        Node(package='navigation_control',
+            executable='gps_waypoint',
+            name='gps_waypoint',
+            output='screen',
+            parameters=[{'odom': odom},
+                        {'waypoint_path': waypoint_path},
+                        {'waypoint_start_index': waypoint_start_index}],
+            arguments=[],
+        ),
         # $ ros2 run navigation_control gps_waypoint
         # file path /ros2_ws/src/Use_action/navigation_control/navigation_control/gps_waypoint
         

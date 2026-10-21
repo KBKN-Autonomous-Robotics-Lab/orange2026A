@@ -22,8 +22,8 @@ class Odom_Combination(Node):
         )
         
         # subscription
-        self.odom_sub = self.create_subscription(Odometry, '/odom/wheel_spimu', self.get_odom, qos_profile)
-        self.gps_odom_sub = self.create_subscription(Odometry, '/odom/UM982', self.get_gps_odom, qos_profile)
+        self.odom_sub = self.create_subscription(Odometry, '/glim_ros/odom', self.get_odom, qos_profile)
+        self.gps_odom_sub = self.create_subscription(Odometry, '/odom_CLAS_movingbase', self.get_gps_odom, qos_profile)
         
         # publisher
         self.odom_pub = self.create_publisher(Odometry, '/odom/combine', qos_profile)

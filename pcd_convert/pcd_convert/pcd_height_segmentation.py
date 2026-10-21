@@ -31,7 +31,7 @@ class PcdHeightSegmentation(Node):
         )
         
         # Subscriptionを作成。
-        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation_merge', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name /pcd_rotation_merge
+        self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name /pcd_rotation_merge
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # Publisherを作成
