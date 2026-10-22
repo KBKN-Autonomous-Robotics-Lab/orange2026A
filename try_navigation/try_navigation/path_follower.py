@@ -104,6 +104,12 @@ class PathFollower(Node):
         self.lh_range = (1.0, 1.3, 0.0, 1.0)
         self.rh_range_wide = (1.0, 1.3, -1.5, 0.0)
         self.lh_range_wide = (1.0, 1.3, 0.0, 1.5)
+        # safety zone (x_min, x_max, y_min, y_max) [m], obs frame
+        # body mask in pcd_height_segmentation: x -0.55~0.10, y -0.29~0.29
+        self.safety_stop_range = (0.10, 0.60, -0.35, 0.35)
+        self.safety_slow_range = (0.60, 1.30, -0.35, 0.35)
+        self.safety_slow_speed = 0.20
+        self.safety_min_points = 3
         self.obs_frame_id = 'odom'
         self.trail_id = 0
 
@@ -470,6 +476,8 @@ class PathFollower(Node):
                     if elapsed <= 10.0:
                         speed = 0.0
                         target_rad = 0.0
+                        self.last_speed = 0.0
+                        self.cmd_vel_publisher.publish(geometry_msgs.Twist())
                         return
                     else: #20 sec passed 
                         self.jam_active = False
@@ -633,6 +641,17 @@ class PathFollower(Node):
         else:
             last_speed = max(last_speed - dec, speed)
         
+        self.last_speed = last_speed
+
+        # safety limit (last speed override before publish)
+        stop_pts = self.pcd_serch(points, *self.safety_stop_range)
+        slow_pts = self.pcd_serch(points, *self.safety_slow_range)
+        if stop_pts.shape[1] >= self.safety_min_points:
+            last_speed = 0.0
+            print(f"### Safety ### STOP {stop_pts.shape[1]} pts")
+        elif slow_pts.shape[1] >= self.safety_min_points:
+            last_speed = min(last_speed, self.safety_slow_speed)
+            print(f"### Safety ### SLOW {slow_pts.shape[1]} pts")
         self.last_speed = last_speed
 
         #make msg
