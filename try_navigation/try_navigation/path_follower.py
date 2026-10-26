@@ -18,9 +18,10 @@ from std_msgs.msg import String
 import tkinter as tk
 from threading import Thread
 from my_msgs.msg import RoadsideInfo
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
 from try_navigation.marker_utils import create_zone_markers, create_target_marker
 from builtin_interfaces.msg import Time
+from geometry_msgs.msg import PointStamped
 
 navigation_status = "Initializing..."
 
@@ -60,7 +61,7 @@ class PathFollower(Node):
         )
 
         # set parameter (launch can change this parameter)
-        self.declare_parameter('odom', '/odom_ekf_match')
+        self.declare_parameter('odom', '/fusion/odom_gnss_match')
         
         # define parameter
         odom_topic = self.get_parameter('odom').get_parameter_value().string_value
@@ -86,6 +87,7 @@ class PathFollower(Node):
         self.stop_line_sub = self.create_subscription(std_msgs.Bool, "/stop_line", self.stopline_callback, 10)
         self.roadside_follow_detected_sub = self.create_subscription(std_msgs.Bool, '/roadside/detected', self.roadside_follow_detected_callback, qos_profile)
         self.roadside_follow_angle_sub = self.create_subscription(std_msgs.Float32, '/roadside/target_angle', self.roadside_follow_angle_callback, qos_profile)
+        self.skip_path_stop_sub = self.create_subscription(std_msgs.Int32, '/skip_path_stop', self.skip_path_stop_callback, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
         # タイマーを0.05秒（50ミリ秒）ごとに呼び出す
@@ -97,6 +99,8 @@ class PathFollower(Node):
         self.pcd_test_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_test_global', qos_profile) 
         self.pcd_jam_publisher = self.create_publisher(sensor_msgs.PointCloud2, 'pcd_jam', qos_profile) 
         self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
+        self.stop_marker_pub = self.create_publisher(Marker, "/stop_global_marker_gnss", qos_profile)
+        self.skip_matching_stop_pub = self.create_publisher(std_msgs.Int32, '/skip_matching_stop', qos_profile)
         self.declare_parameter('debug_marker', True)
         self.debug_marker = self.get_parameter('debug_marker').get_parameter_value().bool_value
         # wall follow range (x_min, x_max, y_min, y_max)
@@ -147,29 +151,25 @@ class PathFollower(Node):
         self.stop_xy_test_flag = 1
         
         self.stop_xy = np.array([ 
-            #xmin,   xmax,  ymin,  ymax,flag,line, 90deg
-            [107.0, 109.0,-255.5,-250.0, 1.0, 1.0,  0.0], #nakaniwa test
-            [116.0, 120.0,-465.0,-460.0, 1.0, 1.0, -2.0], #nakaniwa test2 305
-            [ 56.1,  76.1, -18.0, -17.0, 1.0, 1.0,  0.0], #shiyakusyo 1 tsukuba2026
-            [ 58.5,  78.5, -47.0, -46.0, 1.0, 0.0,  0.0], #shiyakusyo 2 tsukuba2026
-            [ 64.2,  65.2,  19.0,  39.0, 1.0, 0.0,  0.0], #shiyakusyo
-            [100.0, 101.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan1
-            [177.7, 178.7,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan2
-            [257.5, 277.5, -60.0, -59.0, 1.0, 1.0,  0.0], #singoumaeteisisen1
-            [257.5, 277.5, -66.5, -65.5, 1.0, 0.0,  0.0], #singoumae1
-            [256.5, 276.5, -86.2, -85.2, 1.0, 1.0,  0.0], #singoumaeteisisen2
-            [270.3, 271.3, -99.0, -79.5, 1.0, 0.0,  0.0], #singoumae2
-            [405.0, 425.0, -80.2, -79.2, 1.0, 0.0,  0.0], #ekimae oudanhodou1 y-1
-            [545.0, 568.0, -85.0, -60.0, 0.0, 0.0,  0.0], #ekimae not stop
-            [410.0, 417.0, -71.5, -70.5, 1.0, 0.0,  0.0], #ekimae oudanhodou2 y-2
-            [290.6, 291.6, -98.0, -78.0, 1.0, 1.0,  0.0], #singoumaeteisisen3
-            [284.3, 285.3, -98.0, -78.0, 1.0, 0.0,  0.0], #singoumae3
-            [259.5, 279.5, -83.7, -82.7, 1.0, 1.0,  0.0], #singoumaeteisisen4 12
-            [259.5, 279.5, -80.3, -79.3, 1.0, 0.0,  0.0], #singoumae4 13
-            [185.0, 186.0,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan3
-            [107.5, 108.5,  25.0,  45.0, 1.0, 0.0,  0.0], #dourotan4
-            [ 64.0, 104.0, -30.0, -25.0, 1.0, 0.0,  0.0], #GOAL!!!!
-            [  999,   999,   999,   999, 0.0, 0.0,  0.0] ]) #
+            #xmin,   xmax,  ymin,  ymax,flag,line, 90deg, wp
+            [  999,   999,   999,   999, 0.0, 1.0,  0.0,  68], #siyakusyo1 no stop
+            [ 60.0,  75.0, -50.0, -48.0, 1.0, 0.0,  0.0,  74], #siyakusyo2
+            [ 40.5,  60.0,-140.0,-137.0, 1.0, 0.0,  0.0,  92], #dourotan1
+            [ 40.5,  60.0,-162.0,-159.5, 1.0, 0.0,  0.0,  97], #dourotan2
+            [109.5, 111.0,-264.0,-244.0, 1.0, 0.0,  0.0, 128], #dourotan3
+            [187.0, 190.5,-274.0,-254.0, 1.0, 0.0,  0.0, 143], #singoumaeteisisen1
+            [192.0, 194.5,-274.0,-254.0, 1.0, 0.0,  0.0, 144], #singoumae1
+            [125.0, 130.0,-475.5,-455.0, 1.0, 0.0,177.0, 198], #dourotan4
+            [-65.0, -35.0,-485.5,-435.0, 0.0, 0.0,  0.0, 235], #ekimae no stop
+            [120.0, 125.0,-475.0,-455.0, 1.0, 0.0, -2.0, 306], #dourotan5
+            [187.0, 210.5,-292.0,-290.0, 1.0, 0.0,  0.0, 354], #singoumaeteisisen2
+            [180.0, 200.5,-279.5,-275.0, 1.0, 0.0,  0.0, 358], #singoumae2
+            [113.5, 117.5,-264.0,-244.0, 1.0, 0.0,  0.0, 378], #dourotan6
+            [ 40.5,  60.0,-165.5,-160.5, 1.0, 0.0,  0.0, 412], #dourotan7
+            [ 40.5,  60.0,-142.5,-139.0, 1.0, 0.0,  0.0, 417], #dourotan8
+            [ 53.0,  73.0, -58.0, -55.0, 1.0, 0.0,  0.0, 434], #siyakusyo3
+            [ 58.0,  78.0, -25.5, -22.5, 1.0, 0.0,  0.0, 440], #siyakusyo4
+            [  999,   999,   999,   999, 0.0, 0.0,  0.0, 999] ]) #
         self.stop_num = 0;
         
         #obs
@@ -207,6 +207,11 @@ class PathFollower(Node):
         self.stop_line = None
         self.start_rotation = False
 
+        # 相手側にスキップ通知を送信済みの停止地点
+        self.notified_stop_wps = set()
+        # 相手側からスキップ通知を受信済みの停止地点
+        self.skipped_stop_wps = set()
+
     # actionリクエストの受信時に呼ばれる(tuika)
     def listener_callback(self, goal_handle):
         global navigation_status
@@ -235,7 +240,24 @@ class PathFollower(Node):
         goal_handle.succeed()
         result = StopFlag.Result()
         result.sum = goal_handle.request.a + goal_handle.request.b  # 結果の計算
-        return result         
+        return result        
+
+    def skip_path_stop_callback(self, msg):
+        stop_wp = int(msg.data)
+
+        if stop_wp in self.skipped_stop_wps:
+            return
+        if self.stop_num >= len(self.stop_xy) - 1:
+            return
+
+        current_stop_wp = int(self.stop_xy[self.stop_num, 7])
+
+        if current_stop_wp == stop_wp:
+            self.skipped_stop_wps.add(stop_wp)
+            self.stop_num += 1
+            self.get_logger().info(f'Skip PathFollower stop: wp={stop_wp}, 'f'next_stop_wp={int(self.stop_xy[self.stop_num, 7])}')
+        else:
+            self.get_logger().warning(f'Skip request ignored: requested_wp={stop_wp}, 'f'current_wp={current_stop_wp}') 
         
     def get_path(self, msg):
         #self.get_logger().info('Received path with %d waypoints' % len(msg.poses))
@@ -672,7 +694,47 @@ class PathFollower(Node):
         
         self.cmd_vel_publisher.publish(twist_msg)
         #self.get_logger().info('Publishing cmd_vel: linear.x = %f, angular.z = %f : %f deg' % (twist_msg.linear.x, twist_msg.angular.z, math.degrees(twist_msg.angular.z)))
-        
+
+    def publish_stop_position(self, x, y):
+        # ==========================================
+        # PointStamped
+        # ==========================================
+        point_msg = PointStamped()
+
+        point_msg.header.stamp = self.get_clock().now().to_msg()
+        point_msg.header.frame_id = "map"
+
+        point_msg.point.x = x
+        point_msg.point.y = y
+        point_msg.point.z = 0.0
+
+        #self.stop_global_pub.publish(point_msg)
+
+        # ==========================================
+        # Marker
+        # ==========================================
+        marker = Marker()
+        marker.header.stamp = point_msg.header.stamp
+        marker.header.frame_id = "odom"
+        marker.ns = "stop_position"
+        marker.id = self.stop_num
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = 0.2
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.5
+        marker.scale.y = 0.5
+        marker.scale.z = 0.5
+        marker.color.a = 0.9
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.lifetime.sec = 0
+
+        self.stop_marker_pub.publish(marker)    
+    
     def publish_wall_zone(self):
         zones = np.array([[*self.rh_range, 1.0],   # RH: red
                           [*self.lh_range, 0.0]])  # LH: yellow
@@ -764,34 +826,58 @@ class PathFollower(Node):
         self.ref_theta_y = 0 #pitch /math.pi*180
         self.ref_theta_z = yaw /math.pi*180
         
-        '''
-        if self.waypoint_number >= 225: # after dourotan4
-            if self.stop_num <= 15:
-                self.stop_num = 16
-        elif self.waypoint_number >= 198: # after singou
+        if self.waypoint_number >= 437: # after siyakusyo oudanhodou2
+            if self.stop_num <= 14:
+                self.stop_num = 15
+        elif self.waypoint_number >= 420: # after dourotan6
             if self.stop_num <= 13:
                 self.stop_num = 14
-        elif self.waypoint_number >= 178: # after ekimae oudanhodou2
-            if self.stop_num <= 9:
-                self.stop_num = 10
-        elif self.waypoint_number >= 138: # after ekimae oudanhodou1
+        elif self.waypoint_number >= 414: # after dourotan5
+            if self.stop_num <= 12:
+                self.stop_num = 13
+        elif self.waypoint_number >= 380: # after dourotan4
+            if self.stop_num <= 11:
+                self.stop_num = 12
+        elif self.waypoint_number >= 362: # after singou2
+            if self.stop_num <= 10:
+                self.stop_num = 11
+        elif self.waypoint_number >= 307: # after 90do dourotan2
+            if self.stop_num <= 8:
+                self.stop_num = 9
+        elif self.waypoint_number >= 202: # after 90do dourotan2
             if self.stop_num <= 7:
                 self.stop_num = 8
-        elif self.waypoint_number >= 81: # after singou
+        elif self.waypoint_number >= 154: # after singou1
             if self.stop_num <= 6:
                 self.stop_num = 7
-        elif self.waypoint_number >= 57: # after dourotan2
+        elif self.waypoint_number >= 130: # after dourotan3
+            if self.stop_num <= 4:
+                self.stop_num = 5
+        elif self.waypoint_number >= 100: # after dourotan2 
+            if self.stop_num <= 3:
+                self.stop_num = 4
+        elif self.waypoint_number >= 93: # after dourotan1
             if self.stop_num <= 2:
                 self.stop_num = 3
-        '''
+        elif self.waypoint_number >= 79: # after siyakusyo oudanhodou2
+            if self.stop_num <= 1:
+                self.stop_num = 2
         
         # odometry stop point set
         if ((self.stop_xy[self.stop_num,0] < self.ref_position_x) and (self.ref_position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.ref_position_y) and (self.ref_position_y < self.stop_xy[self.stop_num,3]) ) or ((self.stop_xy[self.stop_num,0] < self.position_x) and (self.position_x < self.stop_xy[self.stop_num,1]) and (self.stop_xy[self.stop_num,2] < self.position_y) and (self.position_y < self.stop_xy[self.stop_num,3]) ):
             if self.stop_xy[self.stop_num,5] == 0:
                 if self.stop_xy[self.stop_num,4] > 0:
+                    stop_wp = int(self.stop_xy[self.stop_num, 7])
+                    # マッチング側へスキップ通知
+                    if stop_wp not in self.notified_stop_wps:
+                        stop_wp_msg = std_msgs.Int32()
+                        stop_wp_msg.data = stop_wp
+                        self.skip_matching_stop_pub.publish(stop_wp_msg)
+                        self.notified_stop_wps.add(stop_wp)
                     self.get_logger().info('####### stop flag on %f #######' % (self.stop_num))
                     self.stop_flag = 1;
                     navigation_status = "STOP"
+                    self.publish_stop_position(self.ref_position_x, self.ref_position_y)
                     #print(self.stop_num)
                     if self.stop_xy[self.stop_num,6] != 0:
                         self.rotation_flag = 1
