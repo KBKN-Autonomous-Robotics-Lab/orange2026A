@@ -345,7 +345,7 @@ class PathFollower(Node):
 
         
         ################### Straight Waypoint ############################
-        if (69 <= self.waypoint_number <= 70) or (75 <= self.waypoint_number <= 77) or (146 <= self.waypoint_number <= 148) or (198 <= self.waypoint_number <= 200) or (358 <= self.waypoint_number <= 361):# or 0 <= self.waypoint_number <= 5:
+        if (69 <= self.waypoint_number <= 70) or (75 <= self.waypoint_number <= 77) or (143 <= self.waypoint_number <= 148) or (198 <= self.waypoint_number <= 200) or (353 <= self.waypoint_number <= 354) or (358 <= self.waypoint_number <= 361):# or 0 <= self.waypoint_number <= 5:
             target_waypoint = path[:,-1]
             relative_point_x = target_waypoint[0] - position_x
             relative_point_y = target_waypoint[1] - position_y
