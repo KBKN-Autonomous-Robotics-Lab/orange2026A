@@ -415,7 +415,7 @@ class PotentialAStar(Node):
         #white_obs add(global)
         white_line_local = np.array([[],[],[]])
         if len(self.white_obs_points[0,:])>0: 
-            if (116 <=self.waypoint_number <= 128) or (131 <=self.waypoint_number <= 143) or (151 <=self.waypoint_number <= 196) or (202 <=self.waypoint_number <= 240) or (289 <=self.waypoint_number <= 303) or (310 <=self.waypoint_number <= 354):
+            if (151 <=self.waypoint_number <= 183) or (320 <=self.waypoint_number <= 354):
                 #white_line_local = localization_xyz(self.white_obs_points, position_x, position_y, theta_x, theta_y, theta_z)
                 white_line_local = self.white_obs_points
             '''
