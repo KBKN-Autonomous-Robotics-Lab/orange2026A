@@ -48,7 +48,8 @@ class PcdHeightSegmentation(Node):
         #set obs range
         self.OBS_HIGHT_MIN =   180/1000; #hight range[m]
         self.OBS_HIGHT_MIN_SLOPE =   300/1000; #hight range[m]
-        self.OBS_HIGHT_MAX =  1000/1000; #hight range[m]
+        self.OBS_HIGHT_MAX = 1000/1000; #hight range[m]
+        self.OBS_HIGHT_MAX_LEAF = 350/1000; #hight range[m]
         self.OBS_MASK_X_MIN = -550/1000; #x mask range[m]
         self.OBS_MASK_X_MAX =  100/1000; #x mask range[m]
         self.OBS_MASK_Y_MIN = -290/1000; #y mask range[m]
@@ -112,6 +113,8 @@ class PcdHeightSegmentation(Node):
         #obs segment
         if (23 <= self.waypoint_number <= 24) or (145 <= self.waypoint_number <= 148) or (198 <= self.waypoint_number <= 200) or (280 <= self.waypoint_number <= 281) or (306 <= self.waypoint_number <= 308) or (358 <= self.waypoint_number <= 361):
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN_SLOPE, self.OBS_HIGHT_MAX)
+        elif (54 <= self.waypoint_number <= 55):
+            pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX_LEAF)
         else:
             pcd_obs_height = self.height_segment(points, self.OBS_HIGHT_MIN, self.OBS_HIGHT_MAX)
         pcd_obs = self.pcd_mask(pcd_obs_height, self.OBS_MASK_X_MIN, self.OBS_MASK_X_MAX, self.OBS_MASK_Y_MIN, self.OBS_MASK_Y_MAX)

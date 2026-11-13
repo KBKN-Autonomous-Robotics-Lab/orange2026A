@@ -164,14 +164,14 @@ class PathFollower(Node):
             [ 40.5,  60.0,-162.0,-159.5, 1.0, 0.0,  0.0,  97], #dourotan2
             [109.5, 111.0,-264.0,-244.0, 1.0, 0.0,  0.0, 128], #dourotan3
             [187.0, 190.5,-274.0,-254.0, 1.0, 0.0,  0.0, 143], #singoumaeteisisen1
-            [192.0, 194.5,-274.0,-254.0, 1.0, 0.0,  0.0, 144], #singoumae1
-            [125.0, 130.0,-475.5,-455.0, 1.0, 0.0,177.0, 198], #dourotan4
+            [192.0, 194.5,-274.0,-254.0, 1.0, 0.0,-95.0, 144], #singoumae1
+            [125.0, 130.9,-475.5,-455.0, 1.0, 0.0,177.0, 198], #dourotan4
             [-65.0, -35.0,-485.5,-435.0, 0.0, 0.0,  0.0, 235], #ekimae no stop
             [120.0, 125.0,-475.0,-455.0, 1.0, 0.0, -2.0, 306], #dourotan5
-            [187.0, 210.5,-292.0,-290.0, 1.0, 0.0,  0.0, 354], #singoumaeteisisen2
-            [180.0, 200.5,-279.5,-275.0, 1.0, 0.0,  0.0, 358], #singoumae2
-            [113.5, 117.5,-264.0,-244.0, 1.0, 0.0,  0.0, 378], #dourotan6
-            [ 40.5,  60.0,-165.5,-160.5, 1.0, 0.0,  0.0, 412], #dourotan7
+            [187.0, 210.5,-293.2,-290.0, 1.0, 0.0,  0.0, 354], #singoumaeteisisen2
+            [180.0, 200.5,-279.7,-275.0, 1.0, 0.0,  0.0, 358], #singoumae2
+            [113.5, 118.0,-264.0,-244.0, 1.0, 0.0,  0.0, 378], #dourotan6
+            [ 40.5,  60.0,-166.0,-160.5, 1.0, 0.0,  0.0, 412], #dourotan7
             [ 40.5,  60.0,-142.5,-139.0, 1.0, 0.0,  0.0, 417], #dourotan8
             [ 53.0,  73.0, -58.0, -55.0, 1.0, 0.0,  0.0, 434], #siyakusyo3
             [ 58.0,  78.0, -25.5, -22.5, 1.0, 0.0,  0.0, 440], #siyakusyo4
@@ -359,7 +359,7 @@ class PathFollower(Node):
         
         #set speed
         
-        speed_set = 0.55#55 AutoNav 1.10
+        speed_set = 0.70#55 AutoNav 1.10
         speed = speed_set
 
         
@@ -394,20 +394,20 @@ class PathFollower(Node):
 
         
         if np.any(r_obs) and np.any(l_obs) and ~np.any(c_obs) :
-            speed = 0.25
+            speed = 0.35
             #target_theta = 0
             #target_rad = target_theta/180*math.pi
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #self.get_logger().info('||||||||||| center |||||||||||||||||')
         elif np.any(r_obs) and ~np.any(c_obs) :
-            speed = 0.10 # autonav
+            speed = 0.15 # autonav
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if target_theta < 0:
             #    target_theta = 0.0#lim_steer
             #    target_rad = target_theta/180*math.pi
             #self.get_logger().info('lllllllllll go left lllllllllllllllll')
         elif np.any(l_obs) and ~np.any(c_obs) :
-            speed = 0.10 # autonav
+            speed = 0.15 # autonav
             target_rad, target_theta = self.set_target_rad(path, position_x, position_y, self.target_dist_near, theta_x, theta_y, theta_z)
             #if 0 < target_theta:
             #    target_theta = 0.0#-lim_steer
@@ -459,16 +459,16 @@ class PathFollower(Node):
         now = self.get_clock().now()
         if np.any(c_jam_obs):
             if (
-                (66 <= self.waypoint_number <= 68)      # 68
-                or (72 <= self.waypoint_number <= 74)   # 74
+                (67 <= self.waypoint_number <= 68)      # 68
+                or (73 <= self.waypoint_number <= 74)   # 74
                 #or (92 <= self.waypoint_number <= 92)   # 92
                 #or (97 <= self.waypoint_number <= 97)   # 97
-                or (127 <= self.waypoint_number <= 128) # 128 GPS stop
+                #or (127 <= self.waypoint_number <= 128) # 128 GPS stop
                 or (141 <= self.waypoint_number <= 143) # 143, 144
                 #or (197 <= self.waypoint_number <= 198) # 198
                 #or (304 <= self.waypoint_number <= 305) # 305 GPS stop
-                or (353 <= self.waypoint_number <= 354) # 354, 358
-                or (377 <= self.waypoint_number <= 378) # 378
+                #or (353 <= self.waypoint_number <= 354) # 354, 358
+                #or (377 <= self.waypoint_number <= 378) # 378
                 #or (411 <= self.waypoint_number <= 412) # 412
                 #or (416 <= self.waypoint_number <= 417) # 417
                 or (433 <= self.waypoint_number <= 434) # 434
@@ -495,7 +495,7 @@ class PathFollower(Node):
                         print(f"time: {sec} sec")
 
                     # stop before 20 sec passed
-                    if elapsed <= 10.0:
+                    if elapsed <= 20.0:
                         speed = 0.0
                         target_rad = 0.0
                         self.last_speed = 0.0
@@ -525,7 +525,7 @@ class PathFollower(Node):
         if ~np.any(ch_obs) :
             #--------------路側帯追従（反射強度ベース）----------
             if (
-                (261 <= self.waypoint_number <= 279)
+                (999 <= self.waypoint_number <= 999)
                 and roadside_follow_ok
                 and abs(self.roadside_follow_rad * 180 / math.pi - target_theta) < 70.0
             ):
@@ -556,10 +556,10 @@ class PathFollower(Node):
                     (25 <= self.waypoint_number <= 38 and (-30 <= theta_z <= 30))
                     or (116 <= self.waypoint_number <= 127 and (-30 <= theta_z <= 30))
                     or (130 <= self.waypoint_number <= 143 and (-30 <= theta_z <= 30))
-                    or (290 <= self.waypoint_number <= 304 and (-30 <= theta_z <= 30))
-                    or (311 <= self.waypoint_number <= 314 and (-30 <= theta_z <= 30))
-                    or (321 <= self.waypoint_number <= 354 and (60 <= theta_z <= 120))
                 ): 
+                    #or (290 <= self.waypoint_number <= 304 and (-30 <= theta_z <= 30))
+                    #or (311 <= self.waypoint_number <= 314 and (-30 <= theta_z <= 30))
+                    #or (321 <= self.waypoint_number <= 354 and (60 <= theta_z <= 120))
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
                     rh_obs_close = max(rh_obs[1,:]) # y0 rh min
@@ -582,8 +582,9 @@ class PathFollower(Node):
                 print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                 lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                 lh_dist = -0.65 # 0.65
-                if self.waypoint_number==55:
+                if (54 <= self.waypoint_number <=55):
                     lh_dist = -0.45 # 0.65
+                    print("!!!!!!!!!!!!kabezoidekiteruyo!!!!!!!!!!!!")
                 cy = cf
                 cx = lh_obs_close + lh_dist
                 target_rad = math.atan2(cx, cf)
@@ -593,12 +594,14 @@ class PathFollower(Node):
             elif np.any(lh_obs) and ~np.any(rh_obs):  #左寄り 11 <= self.waypoint_number <= 12 \ 
                 speed = 0.25
                 if (
-                    (152 <= self.waypoint_number <= 183 and (-120 <= theta_z <= -60))
-                    or (188 <= self.waypoint_number <= 195 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
-                    or (203 <= self.waypoint_number <= 240 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
-                    or (364 <= self.waypoint_number <= 377 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    (364 <= self.waypoint_number <= 377 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
                     or (384 <= self.waypoint_number <= 395 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
                 ):   
+                    #(152 <= self.waypoint_number <= 183 and (-120 <= theta_z <= -60))
+                    #or (188 <= self.waypoint_number <= 195 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    #or (203 <= self.waypoint_number <= 240 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    #or (364 <= self.waypoint_number <= 377 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
+                    #or (384 <= self.waypoint_number <= 395 and ((-180 <= theta_z <= -150) or (150 <= theta_z <= 180)))
                     target_theta = (target_rad) * (180 / math.pi)
                     print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
                     lh_obs_close = min(lh_obs[1,:]) # y0 lh min
