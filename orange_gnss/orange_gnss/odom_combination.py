@@ -40,7 +40,7 @@ class Odom_Combination(Node):
         self.angular_z = 0.0
         self.theta_z = 0.0
         self.theta = 0.0
-        self.initial_xy = None #(0.0, 0.0)
+        self.initial_xy = (0.0, 0.0) #None #(0.0, 0.0)
         #self.Position_magnification = 1.0  # 必要なら調整
 
         # tf
@@ -88,9 +88,11 @@ class Odom_Combination(Node):
         return orientation_z, orientation_w
     
     def combine(self):
+        '''
         if self.initial_xy is None:
             self.get_logger().warn("Waiting for initial /odom/UM982 position...")
             return
+        '''
             
         pos_x = self.position_x
         pos_y = self.position_y
@@ -103,6 +105,7 @@ class Odom_Combination(Node):
 
         #degree_to_radian = math.pi / 180
         #pos_theta = self.theta * degree_to_radian # maybe -self.theta * degree_to_radian
+        self.init_theta = 0.0
         pos_theta = self.theta_z + self.init_theta
 
         # rotate init_theta for xy 

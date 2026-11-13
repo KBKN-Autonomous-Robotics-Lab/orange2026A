@@ -125,7 +125,8 @@ class PotentialAStar(Node):
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo2nd=0.25#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo3rd=0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
@@ -576,7 +577,9 @@ class PotentialAStar(Node):
         cg=self.cg
         lo=self.lo
         co=self.co
-        if (150 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
+        if (150 <=self.waypoint_number <= 152) or (320 <=self.waypoint_number <= 354):
+            lo=self.lo3rd
+        elif (153 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
             lo=self.lo2nd
 
         #relative waypoint
