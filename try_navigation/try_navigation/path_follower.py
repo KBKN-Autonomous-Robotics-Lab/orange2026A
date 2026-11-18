@@ -101,6 +101,7 @@ class PathFollower(Node):
         self.marker_pub = self.create_publisher(MarkerArray, 'wall_follow_markers', 10)
         self.stop_marker_pub = self.create_publisher(Marker, "/stop_global_marker_gnss", qos_profile)
         self.skip_matching_stop_pub = self.create_publisher(std_msgs.Int32, '/skip_matching_stop', qos_profile)
+        self.stuck_level_pub = self.create_publisher(Int32, '/stuck_level', qos_profile)
         self.declare_parameter('debug_marker', True)
         self.debug_marker = self.get_parameter('debug_marker').get_parameter_value().bool_value
         # wall follow range (x_min, x_max, y_min, y_max)
@@ -108,12 +109,24 @@ class PathFollower(Node):
         self.lh_range = (1.0, 1.3, 0.0, 1.0)
         self.rh_range_wide = (1.0, 1.3, -1.5, 0.0)
         self.lh_range_wide = (1.0, 1.3, 0.0, 1.5)
+        # emergency avoid range (x_min, x_max, y_min, y_max)
+        self.r_near_range = (0.0, 0.5, -0.5, 0.0)
+        self.l_near_range = (0.0, 0.5,  0.0, 0.5)
+        # emergency avoid angle
+        self.emergency_angle = 10 # [deg]
         # safety zone (x_min, x_max, y_min, y_max) [m], obs frame
         # body mask in pcd_height_segmentation: x -0.55~0.10, y -0.29~0.29
         self.safety_stop_range = (0.10, 0.60, -0.35, 0.35)
         self.safety_slow_range = (0.60, 1.30, -0.35, 0.35)
         self.safety_slow_speed = 0.20
         self.safety_min_points = 3
+        # stuck recovery
+        self.stop_time = None   # 止まった時刻（走っている間は None）
+        self.back_time = None   # 下がり始めた時刻（下がっていない間は None）
+        self.back_pos = None    # 下がり始めた位置
+        self.stuck_count = 0       # スタック回数（最後にスタックした位置から3m動いたら0に戻す）
+        self.stuck_pos = None      # 最後にスタックした位置
+        self.stuck_per_level = 3   # 何回スタックしたら1段上げるか
         self.obs_frame_id = 'odom'
         self.trail_id = 0
 
@@ -181,6 +194,8 @@ class PathFollower(Node):
         #obs
         self.obs_points = np.array([[],[],[],[]])
         self.low_step_obs_points = np.array([[],[],[],[]])
+        self.r_near_obs = 0
+        self.l_near_obs = 0
         self.rh_obs = 0
         self.lh_obs = 0
         self.ch_obs = 0
@@ -446,6 +461,44 @@ class PathFollower(Node):
             speed = 0.15
             target_rad = -lim_steer/180*math.pi
         '''
+        #-----------------------emergency avoid-----------------
+        r_near_obs = self.r_near_obs
+        l_near_obs = self.l_near_obs
+        cf_near = 0.5
+
+        if np.any(r_near_obs) and np.any(l_near_obs):
+            speed = -0.1
+            self.get_logger().info('||||||||||| back |||||||||||||||||')
+        elif np.any(r_near_obs) and ~np.any(l_near_obs) :
+            #speed = 0.0 # autonav
+            #target_theta = -self.emergency_angle
+            #target_rad = (target_theta) * (math.pi / 180)
+            target_theta = (target_rad) * (180 / math.pi)
+            print("!!!RH!!!! Befor target_theta[deg]:",target_theta)
+            r_near_obs_close = max(r_near_obs[1,:]) # y0 rh min
+            r_near_dist = 0.6 # 0.65
+            cy_near = cf_near
+            cx_near = r_near_obs_close + r_near_dist
+            target_rad = math.atan2(cx_near, cy_near)
+            #self.publish_wall_target(cy_near, cx_near, 'rh')
+            target_theta = (target_rad) * (180 / math.pi)
+            print("!!!RH!!!! After target_theta[deg]:",target_theta)
+            self.get_logger().info('||||||||||| turn left |||||||||||||||||')
+        elif np.any(l_near_obs) and ~np.any(r_near_obs) :
+            #speed = 0.0 # autonav
+            #target_theta = self.emergency_angle
+            #target_rad = (target_theta) * (math.pi / 180)
+            target_theta = (target_rad) * (180 / math.pi)
+            print("!!!LH!!!! Befor target_theta[deg]:",target_theta)
+            l_near_obs_close = min(l_near_obs[1,:]) # y0 lh min
+            l_near_dist = -0.6 # 0.65
+            cy_near = cf_near
+            cx_near = l_near_obs_close + l_near_dist
+            target_rad = math.atan2(cx_near, cy_near)
+            #self.publish_wall_target(cy_near, cx_near, 'lh')
+            target_theta = (target_rad) * (180 / math.pi)
+            self.get_logger().info('||||||||||| turn right |||||||||||||||||')
+        #-------------------------------------------------------
         
         rh_obs = self.rh_obs
         lh_obs = self.lh_obs
@@ -679,6 +732,33 @@ class PathFollower(Node):
             print(f"### Safety ### SLOW {slow_pts.shape[1]} pts")
         self.last_speed = last_speed
 
+        # stuck recovery: 3 s stopped -> back 0.2 m
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        pos = np.array([self.position_x, self.position_y])
+        if self.back_time is not None:
+            if np.linalg.norm(pos - self.back_pos) < 0.10 and now_s - self.back_time < 3.0:
+                last_speed = -0.05
+                target_rad_pd = 0.0
+            else:
+                self.back_time = None
+                self.stop_time = None
+                last_speed = 0.0
+        elif stop_pts.shape[1] >= self.safety_min_points and self.stop_flag == 0:
+            if self.stop_time is None:
+                self.stop_time = now_s
+            elif now_s - self.stop_time > 3.0:
+                self.back_time = now_s
+                self.back_pos = pos
+                self.stuck_count += 1
+                self.stuck_pos = pos
+        else:
+            self.stop_time = None
+        self.last_speed = last_speed
+
+        if self.stuck_pos is not None and np.linalg.norm(pos - self.stuck_pos) > 3.0:
+            self.stuck_count = 0
+            self.stuck_pos = None
+        self.stuck_level_pub.publish(Int32(data=self.stuck_count // self.stuck_per_level))
         #make msg
         twist_msg = geometry_msgs.Twist()
         #check stop flag
@@ -945,6 +1025,12 @@ class PathFollower(Node):
         #map_obs
         self.obs_points = points
 
+         # 緊急回避用範囲
+        r_near_range = self.r_near_range
+        l_near_range = self.l_near_range
+        r_near_obs = self.pcd_serch(points, *r_near_range)
+        l_near_obs = self.pcd_serch(points, *l_near_range)
+
         # 例外：壁から離して走る区間は横方向の認識範囲を広げる
         rh_range = self.rh_range
         lh_range = self.lh_range
@@ -969,6 +1055,9 @@ class PathFollower(Node):
 
         c_jam_obs = self.pcd_serch(points, 0.0,2.0,-0.6,0.6,0.6,1.0) #1.0,1.3,-0.4,0.4 #1.0,2.0,-0.8,0.8
             
+        self.r_near_obs = r_near_obs
+        self.l_near_obs = l_near_obs
+
         self.rh_obs = rh_obs
         self.lh_obs = lh_obs
         self.ch_obs = ch_obs
