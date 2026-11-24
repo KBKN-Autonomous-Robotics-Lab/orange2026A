@@ -57,6 +57,19 @@ def generate_launch_description():
             parameters=[{'use_sim_time': USE_SIM_TIME}],
             output='screen'
         ),
+
+        # get hokuyo data
+        Node(
+            package='pointcloud_to_laserscan',
+            executable='laserscan_to_pointcloud_node',
+            name='laserscan_to_pointcloud',
+            remappings=[('scan_in', '/hokuyo_scan'),
+                        ('cloud',  '/hokuyo_cloud')],
+            parameters=[{'target_frame': '', 
+                         'transform_tolerance': 0.01, 
+                         'use_sim_time': USE_SIM_TIME}]
+        ),
+        
         #get livox data
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(livox_to_pointcloud2_launch_file)
@@ -73,6 +86,13 @@ def generate_launch_description():
         Node(package='pcd_convert',
             executable='pcd_rotation_lidar2',
             name='pcd_rotation_lidar2_node',
+            output='screen',
+            parameters=[{'use_sim_time': USE_SIM_TIME}],
+            arguments=[]
+        ),
+        Node(package='pcd_convert',
+            executable='pcd_rotation_hokuyo',
+            name='pcd_rotation_hokuyo_node',
             output='screen',
             parameters=[{'use_sim_time': USE_SIM_TIME}],
             arguments=[]

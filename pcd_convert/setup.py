@@ -48,6 +48,7 @@ setup(
             'pcd_height_segmentation = pcd_convert.pcd_height_segmentation:main',
             'pcd_reflect_segmentation = pcd_convert.pcd_reflect_segmentation:main',
             'pcd_rotation_lidar2 = pcd_convert.pcd_rotation_lidar2:main',
+            'pcd_rotation_hokuyo = pcd_convert.pcd_rotation_hokuyo:main',
             'pcd_merge = pcd_convert.pcd_merge:main'
         ],
     },
