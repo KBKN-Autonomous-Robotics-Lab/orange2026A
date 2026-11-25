@@ -122,14 +122,14 @@ class PotentialAStar(Node):
         self.obs_range = 10#障害物情報の範囲
         self.obs_judge = 0#obs_judgeより大きい場合障害物ありと判定する
         self.lo2nd_step = 0.02   # 1段ごとに lo2nd に足す量
-        self.lo2nd_max = 0.31   # lo2nd の上限
+        self.lo2nd_max = 0.22   # lo2nd の上限
         self.stuck_level = 0
         
         
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
-        self.lo2nd=0.31#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
         self.lo3rd=0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
@@ -623,9 +623,10 @@ class PotentialAStar(Node):
             #astar_uo_y = astar_y_search -  obs_xy[1].reshape(len(obs_xy[1]),1) #y-yo 斥力計算　探索ポイントｘ近場にある障害物を全て行列使って計算
             astar_uo_x = astar_x_search -  obs_short_x.reshape(len(obs_short_x),1) #x-xo 斥力計算　探索ポイントｘ近場にある障害物を全て行列使って計算
             astar_uo_y = astar_y_search -  obs_short_y.reshape(len(obs_short_y),1) #y-yo 斥力計算　探索ポイントｘ近場にある障害物を全て行列使って計算
-            #astar_uo_x2 = ( astar_uo_x * np.ones([len(obs_short_x),len(astar_x_search)]) ) ** 2 #(x-xo)^2
-            #astar_uo_y2 = ( astar_uo_y * np.ones([len(obs_short_y),len(astar_y_search)]) ) ** 2 #(y-yo)^2
-            #astar_uo = sum(co * np.exp(- (astar_uo_x2 + astar_uo_y2) / lo**2 ) ) # Uo計算 sum{co*e(-((x-xo)^2+(y-yo)^2)/lo^2)}
+            astar_uo_x2 = ( astar_uo_x * np.ones([len(obs_short_x),len(astar_x_search)]) ) ** 2 #(x-xo)^2
+            astar_uo_y2 = ( astar_uo_y * np.ones([len(obs_short_y),len(astar_y_search)]) ) ** 2 #(y-yo)^2
+            astar_uo = sum(co * np.exp(- (astar_uo_x2 + astar_uo_y2) / lo**2 ) ) # Uo計算 sum{co*e(-((x-xo)^2+(y-yo)^2)/lo^2)}
+            '''
             ########## obs near ##########
             # 探索候補点と障害物との距離を計算
             astar_uo_x2 = (astar_x_search.reshape(1, -1) - obs_short_x.reshape(-1, 1))**2
@@ -639,6 +640,7 @@ class PotentialAStar(Node):
             # 斥力ポテンシャル
             astar_uo = np.sum(co_local * np.exp(-obs_dist2 / lo_local**2), axis=0)
             ###############################
+            '''
             astar_u=(1/cg*astar_uo+1)*astar_ug #UgとUoでポテンシャル計算
             astar_xy[[astar_xn,astar_xn-1,astar_xn,astar_xn+1,astar_xn],[astar_yn-1,astar_yn,astar_yn,astar_yn,astar_yn+1]] = astar_u #代入
             astar_xymin = astar_xy + (astar_xy_find*500) #一度通過した点を除外
