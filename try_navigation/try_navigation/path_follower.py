@@ -121,7 +121,7 @@ class PathFollower(Node):
         self.emergency_flag = 0
         # safety zone (x_min, x_max, y_min, y_max) [m], obs frame
         # body mask in pcd_height_segmentation: x -0.55~0.10, y -0.29~0.29
-        self.safety_stop_range = (0.10, 0.40, -0.35, 0.35)
+        self.safety_stop_range = (0.00, 0.40, -0.35, 0.35)
         self.safety_slow_range = (0.40, 1.30, -0.35, 0.35)
         self.safety_slow_speed = 0.20
         self.safety_min_points = 3
@@ -718,7 +718,7 @@ class PathFollower(Node):
                 lh_obs_close = min(lh_obs[1,:]) # y0 lh min
                 lh_dist = -0.65 # 0.65
                 if (54 <= self.waypoint_number <=55):
-                    lh_dist = -0.45 # 0.65
+                    lh_dist = -0.65 # 0.65
                     print("!!!!!!!!!!!!kabezoidekiteruyo!!!!!!!!!!!!")
                 cy = cf
                 cx = lh_obs_close + lh_dist
