@@ -85,6 +85,7 @@ class PotentialAStar(Node):
         self.right_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_right', self.get_right_obs, qos_profile)
         self.left_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/line_buff_left', self.get_left_obs, qos_profile)
         self.dot_subscription = self.create_subscription(sensor_msgs.PointCloud2, '/dotted_line', self.get_dot_obs, qos_profile)
+        self.stuck_subscription = self.create_subscription(Int32, '/stuck_level', self.get_stuck_level, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         #self.timer = self.create_timer(0.05, self.timer_callback)
         
@@ -120,12 +121,16 @@ class PotentialAStar(Node):
         self.obs_pixel = 1000/50#障害物のグリッドサイズ設定 
         self.obs_range = 10#障害物情報の範囲
         self.obs_judge = 0#obs_judgeより大きい場合障害物ありと判定する
+        self.lo2nd_step = 0.02   # 1段ごとに lo2nd に足す量
+        self.lo2nd_max = 0.22   # lo2nd の上限
+        self.stuck_level = 0
         
         
         self.cg2nd=20 #ポテンシャルの引力パラメータ
         self.lg2nd=20 #ポテンシャルの引力パラメータ
         self.co2nd=11 #ポテンシャルの斥力パラメータ SICKパラ目：co=11;lo=0.55;
         self.lo2nd=0.22#55 #0.5#0.9#ポテンシャルの斥力パラメータ  24/11/29 ok IGVC20250601 0.25 -> 0.22
+        self.lo3rd=0.22
         #self.lo2nd=0.30#55 #0.5#0.9#ポテンシャルの斥力パラメータ
         
         
@@ -244,6 +249,9 @@ class PotentialAStar(Node):
     def get_waypoint_number(self, msg):
         #get waypoint number
         self.waypoint_number = msg.data
+
+    def get_stuck_level(self, msg):
+        self.stuck_level = msg.data
         
     def pointcloud2_to_array(self, cloud_msg):
         available_fields = [field.name for field in cloud_msg.fields]
@@ -522,6 +530,7 @@ class PotentialAStar(Node):
             obs_points = np.insert(obs_points, len(obs_points[0,:]), dot_line_local.T, axis=1)
         
         obs_points = np.insert(obs_points, len(obs_points[0,:]), relative_point_rot.T, axis=1)
+        #if self.stuck_level == 0:
         obs_points = np.insert(obs_points, len(obs_points[0,:]), self_radius_points.T, axis=1)
         #obs_points = np.insert(obs_points, len(obs_points[0,:]), self.tsukuba_obs.T, axis=1)
         points_round = np.round(obs_points * self.obs_pixel) / self.obs_pixel
@@ -576,8 +585,9 @@ class PotentialAStar(Node):
         cg=self.cg
         lo=self.lo
         co=self.co
+        lo2nd = min(self.lo2nd + self.lo2nd_step * self.stuck_level, self.lo2nd_max)
         if (150 <=self.waypoint_number <= 184) or (320 <=self.waypoint_number <= 354):
-            lo=self.lo2nd
+            lo=lo2nd
 
         #relative waypoint
         relative_wp_x = self.waypoint[0] - self.position_x
@@ -616,6 +626,21 @@ class PotentialAStar(Node):
             astar_uo_x2 = ( astar_uo_x * np.ones([len(obs_short_x),len(astar_x_search)]) ) ** 2 #(x-xo)^2
             astar_uo_y2 = ( astar_uo_y * np.ones([len(obs_short_y),len(astar_y_search)]) ) ** 2 #(y-yo)^2
             astar_uo = sum(co * np.exp(- (astar_uo_x2 + astar_uo_y2) / lo**2 ) ) # Uo計算 sum{co*e(-((x-xo)^2+(y-yo)^2)/lo^2)}
+            '''
+            ########## obs near ##########
+            # 探索候補点と障害物との距離を計算
+            astar_uo_x2 = (astar_x_search.reshape(1, -1) - obs_short_x.reshape(-1, 1))**2
+            astar_uo_y2 = (astar_y_search.reshape(1, -1) - obs_short_y.reshape(-1, 1))**2
+            obs_dist2 = astar_uo_x2 + astar_uo_y2
+            obs_dist = np.sqrt(obs_dist2)
+            # 近距離だけ斥力係数を強くする
+            near_gain = np.clip((0.8 - obs_dist) / (0.8 - 0.2), 0.0, 1.0)
+            co_local = co * (1.0 + near_gain)
+            lo_local = lo + (0.60 - lo) * near_gain
+            # 斥力ポテンシャル
+            astar_uo = np.sum(co_local * np.exp(-obs_dist2 / lo_local**2), axis=0)
+            ###############################
+            '''
             astar_u=(1/cg*astar_uo+1)*astar_ug #UgとUoでポテンシャル計算
             astar_xy[[astar_xn,astar_xn-1,astar_xn,astar_xn+1,astar_xn],[astar_yn-1,astar_yn,astar_yn,astar_yn,astar_yn+1]] = astar_u #代入
             astar_xymin = astar_xy + (astar_xy_find*500) #一度通過した点を除外
@@ -642,7 +667,7 @@ class PotentialAStar(Node):
                 astar_path_y=np.array([astar_yn])
                 lg=self.lg2nd
                 cg=self.cg2nd
-                lo=self.lo2nd
+                lo=lo2nd
                 co=self.co2nd
                 astar_2nd = 1
             if astar_count >200:

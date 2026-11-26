@@ -30,9 +30,16 @@ class PcdHeightSegmentation(Node):
             durability=QoSDurabilityPolicy.VOLATILE,
             depth = 1
         )
+
+        qos_profile_sub_hokuyo = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            depth = 1
+        )
         
         # Subscriptionを作成。
         self.subscription = self.create_subscription(sensor_msgs.PointCloud2, '/pcd_rotation_merge', self.pcd_heigth_segmentation, qos_profile) #set subscribe pcd topic name /pcd_rotation_merge
+        self.hokuyo_sub = self.create_subscription(sensor_msgs.PointCloud2, '/hokuyo_rotation', self.hokuyo_callback, qos_profile_sub_hokuyo)
         self.waypoint_number_sub = self.create_subscription(Int32,'/waypoint_number', self.get_waypoint_number, qos_profile_sub)
         self.subscription  # 警告を回避するために設置されているだけです。削除しても挙動はかわりません。
         
@@ -79,10 +86,41 @@ class PcdHeightSegmentation(Node):
         self.LOW_STEP_Y_MAX     =  5000/1000; #y mask range[m]
 
         self.waypoint_number = 0
+
+        # Hokuyoの位置・角度調整
+        self.hokuyo_x_offset = 0.12
+        self.hokuyo_y_offset = 0.02
+        self.hokuyo_z_offset = 0.1
+
+        # 度数法で設定
+        self.hokuyo_yaw_offset = -3.0
+
+        self.pcd_obs_livox = None
+        self.pcd_obs_hokuyo = None
         
     def get_waypoint_number(self, msg):
         #get waypoint number
         self.waypoint_number = msg.data
+    
+    def hokuyo_callback(self, msg):
+        t_stamp = msg.header.stamp
+        # Hokuyo点群を取得
+        points = self.pointcloud2_to_array(msg)
+        # yawをラジアンに変換
+        yaw = np.deg2rad(self.hokuyo_yaw_offset)
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        # 回転
+        x = points[0, :].copy()
+        y = points[1, :].copy()
+        points[0, :] = cos_yaw * x - sin_yaw * y
+        points[1, :] = sin_yaw * x + cos_yaw * y
+        # 平行移動
+        points[0, :] += self.hokuyo_x_offset
+        points[1, :] += self.hokuyo_y_offset
+        points[2, :] += self.hokuyo_z_offset
+        self.pcd_obs_hokuyo = points
+        self.publish_obs(t_stamp)
     
     def pointcloud2_to_array(self, cloud_msg):
         # Extract point cloud data
@@ -147,8 +185,10 @@ class PcdHeightSegmentation(Node):
         pcd_low_step = self.pcd_serch(pcd_low_step, self.LOW_STEP_X_MIN, self.LOW_STEP_X_MAX, self.LOW_STEP_Y_MIN, self.LOW_STEP_Y_MAX)
         
         #publish for rviz2
-        self.pcd_segment_obs = point_cloud_intensity_msg(pcd_obs.T, t_stamp, 'livox_frame')
-        self.pcd_segment_obs_publisher.publish(self.pcd_segment_obs ) 
+        self.pcd_obs_livox = pcd_obs
+        self.publish_obs(t_stamp)
+        #self.pcd_segment_obs = point_cloud_intensity_msg(pcd_obs.T, t_stamp, 'livox_frame')
+        #self.pcd_segment_obs_publisher.publish(self.pcd_segment_obs ) 
         self.pcd_segment_ground = point_cloud_intensity_msg(pcd_ground.T, t_stamp, 'livox_frame')
         self.pcd_segment_ground_publisher.publish(self.pcd_segment_ground ) 
         self.pcd_segment_middle = point_cloud_intensity_msg(pcd_middle.T, t_stamp, 'livox_frame')
@@ -159,6 +199,18 @@ class PcdHeightSegmentation(Node):
         self.pcd_segment_step_publisher.publish(self.pcd_segment_step ) 
         self.pcd_segment_low_step = point_cloud_intensity_msg(pcd_low_step.T, t_stamp, 'livox_frame')
         self.pcd_segment_low_step_publisher.publish(self.pcd_segment_low_step ) 
+    
+    def publish_obs(self, t_stamp):
+        if self.pcd_obs_livox is None:
+            return
+
+        if self.pcd_obs_hokuyo is None:
+            return
+
+        # Livox + Hokuyo
+        pcd_obs = np.concatenate((self.pcd_obs_livox, self.pcd_obs_hokuyo), axis=1)
+        self.pcd_segment_obs = point_cloud_intensity_msg(pcd_obs.T, t_stamp, 'livox_frame')
+        self.pcd_segment_obs_publisher.publish(self.pcd_segment_obs)
         
     def height_segment(self, pointcloud, height_min, height_max):
         pcd_ind = ((height_min <= pointcloud[2,:]) * (pointcloud[2,:] <= height_max ))

@@ -146,13 +146,13 @@
     <param name="ekf_publish_TF" value="True"/>
   </node> -->
   <!-- hokuyo -->
-  <!--<node pkg="urg_node" exec="urg_node_driver">
+  <node pkg="urg_node" exec="urg_node_driver">
     <param name="serial_port" value="/dev/sensors/hokuyo_urg"/>
     <param name="laser_frame_id" value="hokuyo_link"/>
-    <param name="angle_max" value="1.22"/>
-    <param name="angle_min" value="-1.22"/>
+    <param name="angle_max" value="1.7508"/>
+    <param name="angle_min" value="-1.7108"/>
     <remap from="/scan" to="/hokuyo_scan"/>
-  </node>-->
+  </node>
   <!-- velodyne -->
   <!--<node pkg="velodyne_driver" exec="velodyne_driver_node">
     <param name="device_ip" value=""/>
